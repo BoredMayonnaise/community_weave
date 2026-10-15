@@ -80,16 +80,6 @@
             <RotateCw :size="13" :class="{ 'spin-icon': loading }" />
             <span>{{ loading ? '...' : 'Refresh' }}</span>
           </button>
-
-          <button
-            type="button"
-            class="toolbar-btn map-btn"
-            @click="state.currentTab = 'map'"
-            title="Explore neighborhood on map"
-          >
-            <Map :size="13" />
-            <span>Map</span>
-          </button>
         </div>
       </div>
     </div>
@@ -164,7 +154,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import {
-  Sprout, Search, X, Plus, Gift, HandHelping, MapPin, Map, RotateCw,
+  Sprout, Search, X, Plus, Gift, HandHelping, MapPin, RotateCw,
   Compass, Wrench, Utensils, Package, Sparkles, Layers, Clock
 } from 'lucide-vue-next'
 import { state } from '../state.js'
@@ -515,18 +505,6 @@ onMounted(() => {
 
 .toolbar-btn:disabled {
   opacity: 0.6;
-}
-
-.toolbar-btn.map-btn {
-  background: var(--primary-light);
-  border-color: rgba(13, 148, 136, 0.3);
-  color: var(--primary);
-  font-weight: 700;
-}
-
-.toolbar-btn.map-btn:hover {
-  background: #ccfbf1;
-  border-color: var(--primary);
 }
 
 /* Post Cards */
