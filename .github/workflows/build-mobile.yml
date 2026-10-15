@@ -3,6 +3,7 @@ name: Build Mobile Apps (Android APK & iOS)
 on:
   push:
     branches: [ main, master ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
@@ -106,3 +107,39 @@ jobs:
           name: community-weave-ios-app
           path: frontend/ios/App/build-output/*.zip
           retention-days: 14
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-android, build-ios]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Android Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: community-weave-android-apk
+          path: release-downloads/android
+
+      - name: Download iOS Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: community-weave-ios-app
+          path: release-downloads/ios
+
+      - name: Prepare Release Assets
+        run: |
+          mkdir -p release-binaries
+          cp release-downloads/android/app-debug.apk release-binaries/CommunityWeave-Android-${{ github.ref_name }}.apk
+          cp release-downloads/ios/CommunityWeave-iOS-Debug.zip release-binaries/CommunityWeave-iOS-${{ github.ref_name }}.zip
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-binaries/*
+          generate_release_notes: true
+
