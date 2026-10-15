@@ -4,13 +4,67 @@
     <div class="map-stage">
       <div ref="mapContainer" class="full-leaflet-map"></div>
 
+      <!-- Floating Top Filter Bar -->
+      <div class="explore-top-bar">
+        <div class="explore-search-row">
+          <Search class="search-icon" :size="15" />
+          <input
+            v-model="searchQuery"
+            type="text"
+            class="explore-search-input"
+            placeholder="Filter barangay, tools, food..."
+            @input="applyFilters"
+          />
+          <button v-if="searchQuery" class="clear-search-btn" @click="clearSearch" title="Clear search">
+            <X :size="14" />
+          </button>
+        </div>
+
+        <div class="explore-filter-pills">
+          <button
+            type="button"
+            :class="['filter-pill', { active: activeType === '' }]"
+            @click="setType('')"
+          >
+            <span>All</span>
+            <span class="pill-count">{{ filteredPosts.length }}</span>
+          </button>
+          <button
+            type="button"
+            :class="['filter-pill', 'pill-offer', { active: activeType === 'offer' }]"
+            @click="setType('offer')"
+          >
+            <Gift :size="12" class="pill-icon" />
+            <span>Offers</span>
+            <span class="pill-count">{{ offerCount }}</span>
+          </button>
+          <button
+            type="button"
+            :class="['filter-pill', 'pill-request', { active: activeType === 'request' }]"
+            @click="setType('request')"
+          >
+            <HandHelping :size="12" class="pill-icon" />
+            <span>Requests</span>
+            <span class="pill-count">{{ requestCount }}</span>
+          </button>
+
+          <div class="brgy-select-wrap">
+            <MapPin :size="12" class="brgy-select-pin" />
+            <select v-model="selectedNeighborhood" class="explore-brgy-select" @change="applyFilters">
+              <option value="">All Barangays</option>
+              <option v-for="n in neighborhoods" :key="n" :value="n">{{ n }}</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       <!-- Top Safety Indicator Pill -->
       <div class="map-safety-flag">
         <ShieldCheck :size="13" class="safety-icon-svg" />
         <span>Approx. ~400m Safe Radius</span>
       </div>
 
-      <!-- Floating Controls -->
+      <!-- Floating Bottom Controls -->
       <div class="map-stage-controls">
         <button class="stage-locate-btn" @click="() => centerOnUser(true)" :disabled="locating" title="Center map on my location">
           <LocateFixed v-if="!locating" :size="15" />
@@ -55,60 +109,6 @@
           </div>
         </div>
       </transition>
-    </div>
-
-    <!-- Floating Top Bar (Search & Filters) -->
-    <div class="explore-top-bar">
-      <div class="explore-search-row">
-        <Search class="search-icon" :size="15" />
-        <input
-          v-model="searchQuery"
-          type="text"
-          class="explore-search-input"
-          placeholder="Filter barangay, tools, food..."
-          @input="applyFilters"
-        />
-        <button v-if="searchQuery" class="clear-search-btn" @click="clearSearch" title="Clear search">
-          <X :size="14" />
-        </button>
-      </div>
-
-      <div class="explore-filter-pills">
-        <button
-          type="button"
-          :class="['filter-pill', { active: activeType === '' }]"
-          @click="setType('')"
-        >
-          <span>All</span>
-          <span class="pill-count">{{ filteredPosts.length }}</span>
-        </button>
-        <button
-          type="button"
-          :class="['filter-pill', 'pill-offer', { active: activeType === 'offer' }]"
-          @click="setType('offer')"
-        >
-          <Gift :size="12" class="pill-icon" />
-          <span>Offers</span>
-          <span class="pill-count">{{ offerCount }}</span>
-        </button>
-        <button
-          type="button"
-          :class="['filter-pill', 'pill-request', { active: activeType === 'request' }]"
-          @click="setType('request')"
-        >
-          <HandHelping :size="12" class="pill-icon" />
-          <span>Requests</span>
-          <span class="pill-count">{{ requestCount }}</span>
-        </button>
-
-        <div class="brgy-select-wrap">
-          <MapPin :size="12" class="brgy-select-pin" />
-          <select v-model="selectedNeighborhood" class="explore-brgy-select" @change="applyFilters">
-            <option value="">All Barangays</option>
-            <option v-for="n in neighborhoods" :key="n" :value="n">{{ n }}</option>
-          </select>
-        </div>
-      </div>
     </div>
   </div>
 </template>
@@ -226,35 +226,36 @@ function createUserIcon() {
 function initMap() {
   if (!mapContainer.value) return
 
-  // Determine intelligent initial center
-  let initialCenter = [14.5995, 120.9842] // Manila / Philippines default
-
-  if (state.user?.profile?.latitude && state.user?.profile?.longitude) {
-    initialCenter = [Number(state.user.profile.latitude), Number(state.user.profile.longitude)]
-  } else if (posts.value.length > 0) {
-    const postWithCoords = posts.value.find(p => p.latitude && p.longitude)
-    if (postWithCoords) {
-      initialCenter = [Number(postWithCoords.latitude), Number(postWithCoords.longitude)]
-    }
+  // Prevent duplicate initialization
+  if (map) {
+    map.remove()
+    map = null
   }
 
-  // Prevent looping: set minZoom, maxBounds, and noWrap on tile layer!
+  // Determine intelligent initial center:
+  // 1. Post coordinates (if any post exists)
+  // 2. User profile coordinates (if user set them)
+  // 3. Caloocan / Metro Manila default
+  let initialCenter = [14.7330, 121.0300]
+  const postWithCoords = posts.value.find(p => p.latitude && p.longitude)
+  if (postWithCoords) {
+    initialCenter = [Number(postWithCoords.latitude), Number(postWithCoords.longitude)]
+  } else if (state.user?.profile?.latitude && state.user?.profile?.longitude) {
+    initialCenter = [Number(state.user.profile.latitude), Number(state.user.profile.longitude)]
+  }
+
   map = L.map(mapContainer.value, {
     zoomControl: false,
     attributionControl: false,
-    minZoom: 3,
-    maxZoom: 18,
-    maxBounds: [[-85, -180], [85, 180]],
-    maxBoundsViscosity: 1.0,
     worldCopyJump: false
   }).setView(initialCenter, 13)
 
-  // Standard OpenStreetMap tiles with noWrap to prevent looping
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  // Standard OpenStreetMap tiles (free, reliable)
+  // noWrap: true stops the globe from repeating horizontally
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     minZoom: 3,
     noWrap: true,
-    bounds: [[-85, -180], [85, 180]],
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }).addTo(map)
 
@@ -264,30 +265,29 @@ function initMap() {
 
   renderMarkers(true)
 
-  // Force Leaflet to recalculate size after mounting to avoid grey tiles
+  // Multiple resize invalidation frames to guarantee smooth render across transitions
+  requestAnimationFrame(() => {
+    if (map) map.invalidateSize()
+  })
   setTimeout(() => {
     if (map) map.invalidateSize()
-  }, 150)
+  }, 100)
   setTimeout(() => {
     if (map) map.invalidateSize()
-  }, 400)
-
-  // Background locate user to place blue dot and center
-  centerOnUser(false)
+  }, 350)
+  setTimeout(() => {
+    if (map) map.invalidateSize()
+  }, 700)
 }
 
 function renderMarkers(fit = false) {
   if (!map || !markersLayer) return
   markersLayer.clearLayers()
 
-  const userLat = userMarker?.getLatLng()?.lat || state.user?.profile?.latitude
-  const userLng = userMarker?.getLatLng()?.lng || state.user?.profile?.longitude
-  const userCoords = (userLat && userLng) ? [Number(userLat), Number(userLng)] : null
-
   const bounds = []
 
   filteredPosts.value.forEach((post, idx) => {
-    const coords = geo.getCoordinatesForPost(post, idx, userCoords)
+    const coords = geo.getCoordinatesForPost(post, idx)
     bounds.push(coords)
 
     const isOffer = post.type === 'offer'
@@ -312,7 +312,7 @@ function renderMarkers(fit = false) {
     // Click on circle or marker sets active preview card
     const handleSelect = () => {
       selectedPostPreview.value = post
-      map.panTo(coords, { animate: true, duration: 0.5 })
+      map.panTo(coords, { animate: true, duration: 0.4 })
     }
 
     marker.on('click', handleSelect)
@@ -323,20 +323,10 @@ function renderMarkers(fit = false) {
   })
 
   if (fit && bounds.length > 0 && map) {
-    // Smart bounds fitting: Never fit points spanning thousands of kilometers (e.g. cross-continental)
-    const refPoint = userCoords || bounds[bounds.length - 1] // Prefer user or most recent post
-    const clusteredBounds = bounds.filter(pt => {
-      const dLat = Math.abs(pt[0] - refPoint[0])
-      const dLng = Math.abs(pt[1] - refPoint[1])
-      return dLat < 2.5 && dLng < 2.5 // Within ~200km radius
-    })
-
-    const finalPoints = clusteredBounds.length > 0 ? clusteredBounds : [refPoint]
-
-    if (finalPoints.length === 1) {
-      map.setView(finalPoints[0], 14)
+    if (bounds.length === 1) {
+      map.setView(bounds[0], 14)
     } else {
-      map.fitBounds(finalPoints, { padding: [100, 100], maxZoom: 14 })
+      map.fitBounds(bounds, { padding: [80, 80], maxZoom: 14 })
     }
   }
 }
@@ -375,7 +365,7 @@ async function centerOnUser(showToastMsg = true) {
         }).addTo(map)
         userMarker.bindTooltip('You are here', { permanent: false, direction: 'top' })
       }
-      map.flyTo(userCoords, 14, { duration: 1.2 })
+      map.flyTo(userCoords, 14, { duration: 1.0 })
       if (showToastMsg) {
         state.showToast(`Centered on your location (${pos.neighborhood || 'Nearby'})`)
       }
@@ -421,8 +411,9 @@ onUnmounted(() => {
 .explore-map-view {
   position: relative;
   width: 100%;
-  height: 100%;
-  min-height: 100%;
+  height: calc(100vh - 62px - var(--bottom-nav-height));
+  height: calc(100dvh - 62px - var(--bottom-nav-height));
+  min-height: 500px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -430,14 +421,11 @@ onUnmounted(() => {
 
 /* Map Canvas Container (Full Bleed Big Map) */
 .map-stage {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  position: relative;
   width: 100%;
   height: 100%;
-  z-index: 1;
+  flex: 1;
+  min-height: 500px;
   overflow: hidden;
   background: #f1f5f9;
 }
@@ -445,16 +433,16 @@ onUnmounted(() => {
 .full-leaflet-map {
   width: 100%;
   height: 100%;
-  min-height: 100%;
+  min-height: 500px;
   background: #f1f5f9;
 }
 
 /* Floating Top Filter Bar */
 .explore-top-bar {
   position: absolute;
-  top: 12px;
-  left: 12px;
-  right: 12px;
+  top: 10px;
+  left: 10px;
+  right: 10px;
   z-index: 1000;
   padding: 10px 14px;
   display: flex;
@@ -638,7 +626,7 @@ onUnmounted(() => {
 /* Floating Bottom Controls */
 .map-stage-controls {
   position: absolute;
-  bottom: calc(var(--bottom-nav-height) + 12px);
+  bottom: 12px;
   left: 12px;
   right: 12px;
   display: flex;
@@ -720,7 +708,7 @@ onUnmounted(() => {
 /* Floating Bottom Card Preview */
 .map-post-preview-card {
   position: absolute;
-  bottom: calc(var(--bottom-nav-height) + 12px);
+  bottom: 12px;
   left: 12px;
   right: 12px;
   z-index: 1010;
