@@ -137,6 +137,7 @@ const selectedPostPreview = ref(null)
 let map = null
 let markersLayer = null
 let userMarker = null
+let resizeObserver = null
 
 const filteredPosts = computed(() => {
   return posts.value.filter(post => {
@@ -250,13 +251,12 @@ function initMap() {
     worldCopyJump: false
   }).setView(initialCenter, 13)
 
-  // Standard OpenStreetMap tiles (free, reliable)
-  // noWrap: true stops the globe from repeating horizontally
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  // High-performance ESRI World Street Map (reliable, free, high detail, global CDN, no rate-limiting)
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
     maxZoom: 19,
     minZoom: 3,
     noWrap: true,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    attribution: 'Tiles &copy; Esri'
   }).addTo(map)
 
   L.control.zoom({ position: 'topright' }).addTo(map)
@@ -264,6 +264,19 @@ function initMap() {
   markersLayer = L.layerGroup().addTo(map)
 
   renderMarkers(true)
+
+  // Continuous ResizeObserver to guarantee Leaflet recalculates on every layout/viewport shift
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+  }
+  if (typeof ResizeObserver !== 'undefined' && mapContainer.value) {
+    resizeObserver = new ResizeObserver(() => {
+      if (map) {
+        map.invalidateSize()
+      }
+    })
+    resizeObserver.observe(mapContainer.value)
+  }
 
   // Multiple resize invalidation frames to guarantee smooth render across transitions
   requestAnimationFrame(() => {
@@ -323,6 +336,7 @@ function renderMarkers(fit = false) {
   })
 
   if (fit && bounds.length > 0 && map) {
+    map.invalidateSize()
     if (bounds.length === 1) {
       map.setView(bounds[0], 14)
     } else {
@@ -399,6 +413,10 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
   window.removeEventListener('resize', handleResize)
   if (map) {
     map.remove()
@@ -431,9 +449,13 @@ onUnmounted(() => {
 }
 
 .full-leaflet-map {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   width: 100%;
   height: 100%;
-  min-height: 0;
   background: #f1f5f9;
 }
 
@@ -600,7 +622,7 @@ onUnmounted(() => {
 /* Safety Badge Indicator */
 .map-safety-flag {
   position: absolute;
-  top: 104px;
+  top: 116px;
   left: 14px;
   z-index: 1000;
   display: inline-flex;
@@ -909,7 +931,7 @@ onUnmounted(() => {
 }
 
 :deep(.leaflet-top.leaflet-right) {
-  top: 104px;
+  top: 116px;
   right: 14px;
 }
 

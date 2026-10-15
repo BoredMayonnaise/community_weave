@@ -275,7 +275,7 @@ const locating = ref(false)
 const myPosts = ref([])
 const loadingPosts = ref(false)
 
-const APP_VERSION = 'v1.0.3'
+const APP_VERSION = 'v1.0.4'
 const checkingUpdate = ref(false)
 const updateStatusMsg = ref('')
 const updateAvailable = ref(false)
