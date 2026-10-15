@@ -269,7 +269,12 @@ def posts_list_create(request):
 
         serializer = PostSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save(author=request.user)
+            extra_kwargs = {'author': request.user}
+            if serializer.validated_data.get('latitude') is None and hasattr(request.user, 'profile') and request.user.profile.latitude is not None:
+                extra_kwargs['latitude'] = request.user.profile.latitude
+            if serializer.validated_data.get('longitude') is None and hasattr(request.user, 'profile') and request.user.profile.longitude is not None:
+                extra_kwargs['longitude'] = request.user.profile.longitude
+            serializer.save(**extra_kwargs)
             invalidate_posts_cache()
             cache.delete('neighborhoods_list')
             return Response(serializer.data, status=status.HTTP_201_CREATED)

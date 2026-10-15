@@ -73,7 +73,7 @@
     </header>
 
     <!-- Main Content Area -->
-    <main :class="['app-content', { 'in-chat': !!state.activeConversationId && !state.selectedPost }]">
+    <main :class="['app-content', { 'in-chat': !!state.activeConversationId && !state.selectedPost, 'in-map': state.currentTab === 'map' && !state.selectedPost }]">
       <Transition name="page-fade" mode="out-in">
         <!-- Detail View takes precedence when a post is clicked -->
         <PostDetail v-if="state.selectedPost" key="detail" />

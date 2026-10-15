@@ -200,6 +200,9 @@ async function autoLocate() {
 onMounted(() => {
   if (state.user && state.user.profile?.neighborhood) {
     form.neighborhood = state.user.profile.neighborhood
+    if (state.user.profile.address) form.address = state.user.profile.address
+    if (state.user.profile.latitude) form.latitude = state.user.profile.latitude
+    if (state.user.profile.longitude) form.longitude = state.user.profile.longitude
   }
   api.getNeighborhoods().then(res => { if (res?.length) neighborhoods.value = res }).catch(() => {})
 })

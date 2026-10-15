@@ -1,7 +1,64 @@
 <template>
   <div class="explore-map-view">
-    <!-- Map Top Filter Bar -->
-    <div class="explore-top-bar card">
+    <!-- Map Canvas Container (Full Bleed Big Map) -->
+    <div class="map-stage">
+      <div ref="mapContainer" class="full-leaflet-map"></div>
+
+      <!-- Top Safety Indicator Pill -->
+      <div class="map-safety-flag">
+        <ShieldCheck :size="13" class="safety-icon-svg" />
+        <span>Approx. ~400m Safe Radius</span>
+      </div>
+
+      <!-- Floating Controls -->
+      <div class="map-stage-controls">
+        <button class="stage-locate-btn" @click="() => centerOnUser(true)" :disabled="locating" title="Center map on my location">
+          <LocateFixed v-if="!locating" :size="15" />
+          <div v-else class="stage-spinner"></div>
+          <span>{{ locating ? 'Locating...' : 'My Location' }}</span>
+        </button>
+
+        <div class="stage-legend">
+          <span class="legend-chip"><span class="legend-dot dot-offer"></span> Offers</span>
+          <span class="legend-chip"><span class="legend-dot dot-request"></span> Requests</span>
+        </div>
+      </div>
+
+      <!-- Selected Post Floating Bottom Card -->
+      <transition name="slide-up">
+        <div v-if="selectedPostPreview" class="map-post-preview-card card" @click="openPost(selectedPostPreview)">
+          <div class="preview-header">
+            <span :class="['preview-badge', selectedPostPreview.type === 'offer' ? 'badge-offer' : 'badge-request']">
+              <component :is="selectedPostPreview.type === 'offer' ? Gift : HandHelping" :size="12" class="badge-icon-svg" />
+              <span>{{ selectedPostPreview.type === 'offer' ? 'Offer' : 'Request' }}</span>
+            </span>
+            <span class="preview-cat">{{ selectedPostPreview.category || 'General' }}</span>
+            <button class="preview-close-btn" @click.stop="selectedPostPreview = null" title="Close preview">
+              <X :size="14" />
+            </button>
+          </div>
+
+          <h4 class="preview-title">
+            {{ selectedPostPreview.title }}
+          </h4>
+          <p class="preview-desc">{{ truncateDesc(selectedPostPreview.description) }}</p>
+
+          <div class="preview-meta-row">
+            <div class="preview-loc">
+              <MapPin :size="13" />
+              <span>Approx. Area: {{ selectedPostPreview.neighborhood || 'Local Area' }}</span>
+            </div>
+            <button class="btn btn-primary btn-sm preview-action-btn" @click.stop="openPost(selectedPostPreview)">
+              <span>View & Contact</span>
+              <ChevronRight :size="14" />
+            </button>
+          </div>
+        </div>
+      </transition>
+    </div>
+
+    <!-- Floating Top Bar (Search & Filters) -->
+    <div class="explore-top-bar">
       <div class="explore-search-row">
         <Search class="search-icon" :size="15" />
         <input
@@ -52,63 +109,6 @@
           </select>
         </div>
       </div>
-    </div>
-
-    <!-- Map Canvas Container -->
-    <div class="map-stage">
-      <div ref="mapContainer" class="full-leaflet-map"></div>
-
-      <!-- Top Safety Indicator Pill -->
-      <div class="map-safety-flag">
-        <ShieldCheck :size="13" class="safety-icon-svg" />
-        <span>Approx. ~400m Safe Radius Zones</span>
-      </div>
-
-      <!-- Floating Controls -->
-      <div class="map-stage-controls">
-        <button class="stage-locate-btn" @click="centerOnUser" :disabled="locating" title="Center map on my location">
-          <LocateFixed v-if="!locating" :size="15" />
-          <div v-else class="stage-spinner"></div>
-          <span>{{ locating ? 'Locating...' : 'My Location' }}</span>
-        </button>
-
-        <div class="stage-legend">
-          <span class="legend-chip"><span class="legend-dot dot-offer"></span> Offers</span>
-          <span class="legend-chip"><span class="legend-dot dot-request"></span> Requests</span>
-        </div>
-      </div>
-
-      <!-- Selected Post Floating Bottom Card -->
-      <transition name="slide-up">
-        <div v-if="selectedPostPreview" class="map-post-preview-card card" @click="openPost(selectedPostPreview)">
-          <div class="preview-header">
-            <span :class="['preview-badge', selectedPostPreview.type === 'offer' ? 'badge-offer' : 'badge-request']">
-              <component :is="selectedPostPreview.type === 'offer' ? Gift : HandHelping" :size="12" class="badge-icon-svg" />
-              <span>{{ selectedPostPreview.type === 'offer' ? 'Offer' : 'Request' }}</span>
-            </span>
-            <span class="preview-cat">{{ selectedPostPreview.category || 'General' }}</span>
-            <button class="preview-close-btn" @click.stop="selectedPostPreview = null" title="Close preview">
-              <X :size="14" />
-            </button>
-          </div>
-
-          <h4 class="preview-title">
-            {{ selectedPostPreview.title }}
-          </h4>
-          <p class="preview-desc">{{ truncateDesc(selectedPostPreview.description) }}</p>
-
-          <div class="preview-meta-row">
-            <div class="preview-loc">
-              <MapPin :size="13" />
-              <span>Approx. Area: {{ selectedPostPreview.neighborhood || 'Local Area' }}</span>
-            </div>
-            <button class="btn btn-primary btn-sm preview-action-btn" @click.stop="openPost(selectedPostPreview)">
-              <span>View & Contact</span>
-              <ChevronRight :size="14" />
-            </button>
-          </div>
-        </div>
-      </transition>
     </div>
   </div>
 </template>
@@ -164,16 +164,16 @@ const requestCount = computed(() => {
 
 function setType(type) {
   activeType.value = type
-  renderMarkers()
+  renderMarkers(false)
 }
 
 function clearSearch() {
   searchQuery.value = ''
-  renderMarkers()
+  renderMarkers(false)
 }
 
 function applyFilters() {
-  renderMarkers()
+  renderMarkers(false)
 }
 
 function truncateDesc(desc) {
@@ -226,34 +226,68 @@ function createUserIcon() {
 function initMap() {
   if (!mapContainer.value) return
 
-  const defaultCenter = [37.7749, -122.4194]
+  // Determine intelligent initial center
+  let initialCenter = [14.5995, 120.9842] // Manila / Philippines default
 
+  if (state.user?.profile?.latitude && state.user?.profile?.longitude) {
+    initialCenter = [Number(state.user.profile.latitude), Number(state.user.profile.longitude)]
+  } else if (posts.value.length > 0) {
+    const postWithCoords = posts.value.find(p => p.latitude && p.longitude)
+    if (postWithCoords) {
+      initialCenter = [Number(postWithCoords.latitude), Number(postWithCoords.longitude)]
+    }
+  }
+
+  // Prevent looping: set minZoom, maxBounds, and noWrap on tile layer!
   map = L.map(mapContainer.value, {
     zoomControl: false,
-    attributionControl: false
-  }).setView(defaultCenter, 13)
+    attributionControl: false,
+    minZoom: 3,
+    maxZoom: 18,
+    maxBounds: [[-85, -180], [85, 180]],
+    maxBoundsViscosity: 1.0,
+    worldCopyJump: false
+  }).setView(initialCenter, 13)
 
-  // Standard OpenStreetMap tiles (100% free, no API key required)
+  // Standard OpenStreetMap tiles with noWrap to prevent looping
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
+    minZoom: 3,
+    noWrap: true,
+    bounds: [[-85, -180], [85, 180]],
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }).addTo(map)
 
-  L.control.zoom({ position: 'topright' }).addTo(map)
+  L.control.zoom({ position: 'bottomright' }).addTo(map)
 
   markersLayer = L.layerGroup().addTo(map)
 
-  renderMarkers()
+  renderMarkers(true)
+
+  // Force Leaflet to recalculate size after mounting to avoid grey tiles
+  setTimeout(() => {
+    if (map) map.invalidateSize()
+  }, 150)
+  setTimeout(() => {
+    if (map) map.invalidateSize()
+  }, 400)
+
+  // Background locate user to place blue dot and center
+  centerOnUser(false)
 }
 
 function renderMarkers(fit = false) {
   if (!map || !markersLayer) return
   markersLayer.clearLayers()
 
+  const userLat = userMarker?.getLatLng()?.lat || state.user?.profile?.latitude
+  const userLng = userMarker?.getLatLng()?.lng || state.user?.profile?.longitude
+  const userCoords = (userLat && userLng) ? [Number(userLat), Number(userLng)] : null
+
   const bounds = []
 
   filteredPosts.value.forEach((post, idx) => {
-    const coords = geo.getCoordinatesForPost(post, idx)
+    const coords = geo.getCoordinatesForPost(post, idx, userCoords)
     bounds.push(coords)
 
     const isOffer = post.type === 'offer'
@@ -278,7 +312,7 @@ function renderMarkers(fit = false) {
     // Click on circle or marker sets active preview card
     const handleSelect = () => {
       selectedPostPreview.value = post
-      map.panTo(coords, { animate: true, duration: 0.6 })
+      map.panTo(coords, { animate: true, duration: 0.5 })
     }
 
     marker.on('click', handleSelect)
@@ -289,7 +323,21 @@ function renderMarkers(fit = false) {
   })
 
   if (fit && bounds.length > 0 && map) {
-    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 })
+    // Smart bounds fitting: Never fit points spanning thousands of kilometers (e.g. cross-continental)
+    const refPoint = userCoords || bounds[bounds.length - 1] // Prefer user or most recent post
+    const clusteredBounds = bounds.filter(pt => {
+      const dLat = Math.abs(pt[0] - refPoint[0])
+      const dLng = Math.abs(pt[1] - refPoint[1])
+      return dLat < 2.5 && dLng < 2.5 // Within ~200km radius
+    })
+
+    const finalPoints = clusteredBounds.length > 0 ? clusteredBounds : [refPoint]
+
+    if (finalPoints.length === 1) {
+      map.setView(finalPoints[0], 14)
+    } else {
+      map.fitBounds(finalPoints, { padding: [100, 100], maxZoom: 14 })
+    }
   }
 }
 
@@ -311,7 +359,7 @@ async function fetchPosts() {
   }
 }
 
-async function centerOnUser() {
+async function centerOnUser(showToastMsg = true) {
   locating.value = true
   try {
     const pos = await geo.locateUser()
@@ -328,11 +376,22 @@ async function centerOnUser() {
         userMarker.bindTooltip('You are here', { permanent: false, direction: 'top' })
       }
       map.flyTo(userCoords, 14, { duration: 1.2 })
+      if (showToastMsg) {
+        state.showToast(`Centered on your location (${pos.neighborhood || 'Nearby'})`)
+      }
     }
   } catch (err) {
-    state.showToast(err.message || 'Could not locate device')
+    if (showToastMsg) {
+      state.showToast(err.message || 'Could not locate device')
+    }
   } finally {
     locating.value = false
+  }
+}
+
+function handleResize() {
+  if (map) {
+    map.invalidateSize()
   }
 }
 
@@ -342,12 +401,15 @@ onMounted(() => {
     if (res?.length) neighborhoods.value = res
   }).catch(() => {})
 
+  window.addEventListener('resize', handleResize)
+
   nextTick(() => {
     initMap()
   })
 })
 
 onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
   if (map) {
     map.remove()
     map = null
@@ -357,24 +419,53 @@ onUnmounted(() => {
 
 <style scoped>
 .explore-map-view {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  height: 100%;
-  margin-top: -8px;
+  overflow: hidden;
 }
 
+/* Map Canvas Container (Full Bleed Big Map) */
+.map-stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  overflow: hidden;
+  background: #f1f5f9;
+}
+
+.full-leaflet-map {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  background: #f1f5f9;
+}
+
+/* Floating Top Filter Bar */
 .explore-top-bar {
-  padding: 10px 12px;
-  margin-bottom: 10px;
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 1000;
+  padding: 10px 14px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(12px);
-  border-radius: 16px;
-  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 18px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.12);
 }
 
 .explore-search-row {
@@ -518,34 +609,18 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-/* Map Stage */
-.map-stage {
-  position: relative;
-  flex: 1;
-  min-height: 480px;
-  border-radius: 18px;
-  overflow: hidden;
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
-  border: 1px solid var(--border-color);
-}
-
-.full-leaflet-map {
-  width: 100%;
-  height: 100%;
-  min-height: 480px;
-  background: #f1f5f9;
-}
-
+/* Safety Badge Indicator */
 .map-safety-flag {
   position: absolute;
-  top: 10px;
-  left: 12px;
+  top: 104px;
+  left: 14px;
   z-index: 1000;
   display: inline-flex;
   align-items: center;
   gap: 5px;
   background: rgba(240, 253, 250, 0.95);
   backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border: 1px solid rgba(13, 148, 136, 0.3);
   color: #0f766e;
   font-size: 0.68rem;
@@ -560,9 +635,10 @@ onUnmounted(() => {
   color: #0d9488;
 }
 
+/* Floating Bottom Controls */
 .map-stage-controls {
   position: absolute;
-  bottom: 12px;
+  bottom: calc(var(--bottom-nav-height) + 12px);
   left: 12px;
   right: 12px;
   display: flex;
@@ -581,11 +657,11 @@ onUnmounted(() => {
   background: #ffffff;
   border: 1px solid var(--border-color);
   border-radius: 9999px;
-  padding: 7px 13px;
+  padding: 7px 14px;
   font-size: 0.78rem;
   font-weight: 600;
   color: #1e293b;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.16);
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -644,23 +720,16 @@ onUnmounted(() => {
 /* Floating Bottom Card Preview */
 .map-post-preview-card {
   position: absolute;
-  bottom: 58px;
+  bottom: calc(var(--bottom-nav-height) + 12px);
   left: 12px;
   right: 12px;
   z-index: 1010;
+  background: #ffffff;
+  border-radius: 18px;
   padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.98);
-  backdrop-filter: blur(14px);
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.18);
   border: 1px solid rgba(226, 232, 240, 0.95);
-  border-radius: 16px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.map-post-preview-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22);
 }
 
 .preview-header {
@@ -671,13 +740,13 @@ onUnmounted(() => {
 }
 
 .preview-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 0.68rem;
   font-weight: 700;
   padding: 2px 7px;
   border-radius: 9999px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
 }
 
 .badge-icon-svg {
@@ -686,8 +755,8 @@ onUnmounted(() => {
 
 .preview-cat {
   font-size: 0.72rem;
-  color: #94a3b8;
-  font-weight: 600;
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
 .preview-close-btn {
@@ -696,70 +765,158 @@ onUnmounted(() => {
   border: none;
   color: #94a3b8;
   cursor: pointer;
-  padding: 3px;
-  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s ease;
+  padding: 4px;
+  border-radius: 50%;
 }
 
 .preview-close-btn:hover {
-  color: #334155;
   background: #f1f5f9;
+  color: #0f172a;
 }
 
 .preview-title {
-  font-size: 0.98rem;
+  font-size: 0.95rem;
   font-weight: 700;
   color: #0f172a;
-  line-height: 1.25;
   margin-bottom: 4px;
+  line-height: 1.3;
 }
 
 .preview-desc {
   font-size: 0.8rem;
   color: #64748b;
-  line-height: 1.4;
   margin-bottom: 10px;
+  line-height: 1.4;
 }
 
 .preview-meta-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding-top: 8px;
   border-top: 1px solid #f1f5f9;
+  padding-top: 8px;
 }
 
 .preview-loc {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.74rem;
+  font-size: 0.75rem;
+  color: var(--primary);
   font-weight: 600;
-  color: #0f766e;
 }
 
 .preview-action-btn {
-  padding: 6px 12px;
-  font-size: 0.75rem;
-  border-radius: 9999px;
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  font-size: 0.75rem;
+  padding: 5px 12px;
+  border-radius: 9999px;
+  min-height: auto;
 }
 
-/* Slide up animation */
+/* Zone Marker Pills */
+:deep(.custom-zone-marker) {
+  background: transparent !important;
+  border: none !important;
+}
+
+:deep(.area-zone-pill) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.16);
+  white-space: nowrap;
+  cursor: pointer;
+  transform: translateY(0);
+  transition: transform 0.15s ease;
+}
+
+:deep(.area-zone-pill:hover) {
+  transform: scale(1.06);
+}
+
+:deep(.area-badge-offer) {
+  background: #059669;
+  color: #ffffff;
+  border: 1.5px solid #ffffff;
+}
+
+:deep(.area-badge-request) {
+  background: #2563eb;
+  color: #ffffff;
+  border: 1.5px solid #ffffff;
+}
+
+:deep(.zone-svg-icon) {
+  flex-shrink: 0;
+}
+
+/* User Pulsing Dot Marker */
+:deep(.custom-user-marker) {
+  background: transparent !important;
+  border: none !important;
+}
+
+:deep(.user-pulse-marker) {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:deep(.pulse-ring) {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(13, 148, 136, 0.4);
+  animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+:deep(.user-dot) {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #0d9488;
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  position: relative;
+  z-index: 2;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.6); opacity: 1; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .slide-up-enter-active,
 .slide-up-leave-active {
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.slide-up-enter-from,
-.slide-up-leave-to {
-  transform: translateY(20px);
+.slide-up-enter-from {
   opacity: 0;
+  transform: translateY(20px);
+}
+
+.slide-up-leave-to {
+  opacity: 0;
+  transform: translateY(20px);
 }
 </style>

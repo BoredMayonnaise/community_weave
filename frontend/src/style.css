@@ -276,9 +276,11 @@ body {
   flex-direction: column;
 }
 
-.app-content.in-chat {
+.app-content.in-chat,
+.app-content.in-map {
   padding: 0;
   overflow: hidden;
+  height: 100%;
 }
 
 /* Bottom Nav */
