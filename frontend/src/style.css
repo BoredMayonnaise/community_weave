@@ -524,8 +524,8 @@ body {
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: 3px 9px;
+  border-radius: 9999px;
 }
 
 .badge-offer {
@@ -538,6 +538,12 @@ body {
   background: var(--request-bg);
   color: var(--request-color);
   border: 1px solid var(--request-border);
+}
+
+.badge-active {
+  background: var(--offer-bg);
+  color: var(--offer-color);
+  border: 1px solid var(--offer-border);
 }
 
 .badge-closed {

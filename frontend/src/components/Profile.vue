@@ -72,7 +72,7 @@
             />
           </div>
           <button class="btn btn-primary btn-block" style="margin-top: 2px;" :disabled="savingProfile" @click="saveProfile">
-            {{ savingProfile ? 'Saving...' : 'Save Profile (Using Token)' }}
+            {{ savingProfile ? 'Saving...' : 'Save Changes' }}
           </button>
         </div>
       </div>
@@ -231,7 +231,7 @@
       </div>
 
       <p style="margin-top: 10px; font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
-        Community Weave native client with zero server RAM footprint.
+        Community Weave native app for connecting and sharing with your neighbors.
       </p>
 
       <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center;">
@@ -255,41 +255,6 @@
         {{ updateStatusMsg }}
       </div>
     </div>
-
-    <!-- Session Auth Token Card -->
-    <div v-if="state.token" class="card token-card" style="margin-top: 16px;">
-      <div class="token-card-header" @click="showTokenSection = !showTokenSection" style="cursor: pointer; display: flex; align-items: center; justify-content: space-between;">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <KeyRound class="inline-icon" :size="16" />
-          <span style="font-weight: 600; font-size: 0.92rem;">Session Auth Token</span>
-        </div>
-        <button type="button" class="btn-text" style="font-size: 0.78rem;">
-          {{ showTokenSection ? 'Hide' : 'Manage' }}
-        </button>
-      </div>
-
-      <div v-if="showTokenSection" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color, #e2e8f0);">
-        <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 8px;">
-          This DRF token authorizes all profile updates, posts, and direct messages:
-        </p>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <input
-            :type="revealToken ? 'text' : 'password'"
-            :value="state.token"
-            readonly
-            class="form-input"
-            style="flex: 1; font-family: monospace; font-size: 0.76rem;"
-          />
-          <button class="btn btn-secondary" style="font-size: 0.78rem; padding: 0 10px;" @click="revealToken = !revealToken">
-            {{ revealToken ? 'Hide' : 'Reveal' }}
-          </button>
-          <button class="btn btn-secondary" style="font-size: 0.78rem; padding: 0 10px;" @click="copyToken">
-            <component :is="tokenCopied ? Check : Copy" :size="13" class="inline-icon" />
-            {{ tokenCopied ? 'Copied' : 'Copy' }}
-          </button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -297,7 +262,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import {
   LockKeyhole, MapPin, ArrowRight, Gift, HandHelping, LocateFixed, ShieldCheck,
-  Smartphone, RefreshCw, Download, KeyRound, Copy, Check
+  Smartphone, RefreshCw, Download
 } from 'lucide-vue-next'
 import { state } from '../state.js'
 import { api } from '../api.js'
@@ -310,16 +275,12 @@ const locating = ref(false)
 const myPosts = ref([])
 const loadingPosts = ref(false)
 
-const APP_VERSION = 'v1.0.0'
+const APP_VERSION = 'v1.0.1'
 const checkingUpdate = ref(false)
 const updateStatusMsg = ref('')
 const updateAvailable = ref(false)
 const latestRelease = ref(null)
 const latestApkUrl = ref('')
-
-const showTokenSection = ref(false)
-const revealToken = ref(false)
-const tokenCopied = ref(false)
 
 async function checkForAppUpdates() {
   checkingUpdate.value = true
@@ -352,18 +313,6 @@ async function checkForAppUpdates() {
     updateStatusMsg.value = `Could not check updates: ${err.message}`
   } finally {
     checkingUpdate.value = false
-  }
-}
-
-async function copyToken() {
-  if (!state.token) return
-  try {
-    await navigator.clipboard.writeText(state.token)
-    tokenCopied.value = true
-    state.showToast('Token copied to clipboard!')
-    setTimeout(() => { tokenCopied.value = false }, 2500)
-  } catch {
-    state.showToast('Please copy token manually.')
   }
 }
 
@@ -468,7 +417,7 @@ async function saveProfile() {
     const updated = await api.updateProfile(payload)
     state.user = updated
     localStorage.setItem('cw_user', JSON.stringify(updated))
-    state.showToast('Profile updated using token!')
+    state.showToast('Profile updated successfully!')
   } catch (err) {
     state.showToast(err.message || 'Failed to update')
   } finally {

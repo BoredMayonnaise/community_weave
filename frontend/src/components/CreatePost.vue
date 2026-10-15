@@ -11,84 +11,96 @@
 
     <div v-else class="card form-card">
       <h2 class="page-title">New Post</h2>
-      <p class="page-subtitle">Share what you need or what you have to offer.</p>
+      <p class="page-subtitle">Share what you need or what you have to offer with your neighbors.</p>
 
       <div v-if="error" class="error-box">{{ error }}</div>
 
       <form @submit.prevent="submitPost">
         <!-- Post Type Selector -->
         <div class="form-group">
-          <label class="form-label">Post Type</label>
+          <label class="form-label">What would you like to post?</label>
           <div class="type-selector">
             <button
               type="button"
               :class="['type-option', { 'request-active active': form.type === 'request' }]"
               @click="form.type = 'request'"
             >
-              <HandHelping class="inline-icon" :size="16" /> Request (Need help)
+              <HandHelping class="inline-icon" :size="16" />
+              <span>Request (Need Help)</span>
             </button>
             <button
               type="button"
               :class="['type-option', { 'offer-active active': form.type === 'offer' }]"
               @click="form.type = 'offer'"
             >
-              <Gift class="inline-icon" :size="16" /> Offer (Can share)
+              <Gift class="inline-icon" :size="16" />
+              <span>Offer (Can Share)</span>
             </button>
           </div>
         </div>
 
+        <!-- Category Grid Selector -->
         <div class="form-group">
-          <label class="form-label">Title</label>
+          <label class="form-label">Category</label>
+          <div class="category-grid">
+            <button
+              v-for="cat in categoryList"
+              :key="cat.name"
+              type="button"
+              :class="['cat-choice-btn', { active: form.category === cat.name }]"
+              @click="form.category = cat.name"
+            >
+              <component :is="cat.icon" :size="15" class="cat-choice-icon" />
+              <span>{{ cat.name }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Title -->
+        <div class="form-group">
+          <div class="label-with-hint">
+            <label class="form-label">Title</label>
+            <span class="char-count">{{ form.title.length }}/100</span>
+          </div>
           <input
             v-model="form.title"
+            maxlength="100"
             class="form-input"
             required
-            placeholder="e.g. Need ladder for 2 hours, or Extra lemons from garden"
+            :placeholder="form.type === 'request' ? 'e.g. Need ladder for 2 hours, or Looking for tutoring' : 'e.g. Extra lemons from garden, or Cordless drill to lend'"
           />
         </div>
 
-        <div class="form-row">
-          <div class="form-group" style="flex: 1">
-            <label class="form-label">Category</label>
-            <select v-model="form.category" class="form-select">
-              <option value="Tools">Tools</option>
-              <option value="Food">Food</option>
-              <option value="Goods">Goods</option>
-              <option value="Skills">Skills</option>
-              <option value="Help">Help</option>
-              <option value="Other">Other</option>
-            </select>
+        <!-- Neighborhood with GPS -->
+        <div class="form-group">
+          <div class="label-with-btn">
+            <label class="form-label" style="margin-bottom: 0">Barangay / Neighborhood</label>
+            <button
+              type="button"
+              class="locate-badge-btn"
+              @click="autoLocate"
+              :disabled="locating"
+              title="Auto-detect from GPS"
+            >
+              <LocateFixed :size="12" />
+              <span>{{ locating ? 'Locating...' : 'Locate Me' }}</span>
+            </button>
           </div>
-
-          <div class="form-group" style="flex: 1">
-            <div class="label-with-btn">
-              <label class="form-label" style="margin-bottom: 0">Barangay / Neighborhood</label>
-              <button
-                type="button"
-                class="locate-badge-btn"
-                @click="autoLocate"
-                :disabled="locating"
-                title="Auto-detect from GPS"
-              >
-                <LocateFixed :size="12" />
-                <span>{{ locating ? 'Locating...' : 'Locate Me' }}</span>
-              </button>
-            </div>
-            <input
-              v-model="form.neighborhood"
-              class="form-input"
-              required
-              placeholder="e.g. Brgy. Zone 15, Cadiz or Downtown"
-              list="neighborhood-options"
-            />
-            <datalist id="neighborhood-options">
-              <option v-for="n in neighborhoods" :key="n" :value="n" />
-            </datalist>
-          </div>
+          <input
+            v-model="form.neighborhood"
+            class="form-input"
+            required
+            placeholder="e.g. Brgy. Zone 15, Cadiz or Downtown"
+            list="neighborhood-options"
+          />
+          <datalist id="neighborhood-options">
+            <option v-for="n in neighborhoods" :key="n" :value="n" />
+          </datalist>
         </div>
 
+        <!-- Approximate Address -->
         <div class="form-group">
-          <label class="form-label">Approximate Address or Pickup Spot <span class="optional-label">(Optional)</span></label>
+          <label class="form-label">Approximate Landmark or Pickup Spot <span class="optional-label">(Optional)</span></label>
           <input
             v-model="form.address"
             class="form-input"
@@ -102,10 +114,15 @@
           </div>
         </div>
 
+        <!-- Description -->
         <div class="form-group">
-          <label class="form-label">Description & Details</label>
+          <div class="label-with-hint">
+            <label class="form-label">Description & Details</label>
+            <span class="char-count">{{ form.description.length }}/1000</span>
+          </div>
           <textarea
             v-model="form.description"
+            maxlength="1000"
             class="form-textarea"
             rows="4"
             required
@@ -113,8 +130,9 @@
           ></textarea>
         </div>
 
-        <button type="submit" class="btn btn-primary btn-block" :disabled="submitting">
-          {{ submitting ? 'Publishing...' : 'Publish Post' }}
+        <button type="submit" class="btn btn-primary btn-block publish-btn" :disabled="submitting">
+          <Send v-if="!submitting" class="inline-icon" :size="15" />
+          <span>{{ submitting ? 'Publishing...' : (form.type === 'offer' ? 'Publish Offer' : 'Publish Request') }}</span>
         </button>
       </form>
     </div>
@@ -123,7 +141,10 @@
 
 <script setup>
 import { reactive, ref, onMounted } from 'vue'
-import { LockKeyhole, HandHelping, Gift, LocateFixed, ShieldCheck } from 'lucide-vue-next'
+import {
+  LockKeyhole, HandHelping, Gift, LocateFixed, ShieldCheck,
+  Wrench, Utensils, Package, Sparkles, Layers, Send
+} from 'lucide-vue-next'
 import { state } from '../state.js'
 import { api } from '../api.js'
 import { geo } from '../geo.js'
@@ -132,6 +153,15 @@ const submitting = ref(false)
 const locating = ref(false)
 const error = ref('')
 const neighborhoods = ref(['Downtown', 'North Hills', 'Riverside', 'West End', 'Oakridge'])
+
+const categoryList = [
+  { name: 'Tools', icon: Wrench },
+  { name: 'Food', icon: Utensils },
+  { name: 'Goods', icon: Package },
+  { name: 'Skills', icon: Sparkles },
+  { name: 'Help', icon: HandHelping },
+  { name: 'Other', icon: Layers },
+]
 
 const form = reactive({
   type: 'request',
@@ -199,20 +229,21 @@ async function submitPost() {
 
 <style scoped>
 .page-title {
-  font-size: 1.25rem;
-  font-weight: 700;
+  font-size: 1.3rem;
+  font-weight: 800;
   color: #0f172a;
+  letter-spacing: -0.02em;
 }
 
 .page-subtitle {
   font-size: 0.88rem;
   color: #64748b;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .type-selector {
   display: flex;
-  gap: 8px;
+  gap: 10px;
 }
 
 .type-option {
@@ -220,21 +251,24 @@ async function submitPost() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 10px;
-  border: 1px solid var(--border-color);
+  gap: 8px;
+  padding: 11px;
+  border: 1.5px solid var(--border-color);
   background: #f8fafc;
   color: #475569;
   border-radius: var(--radius-sm);
   font-weight: 600;
-  font-size: 0.85rem;
+  font-size: 0.86rem;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.16s ease;
+}
+
+.type-option:hover {
+  background: #f1f5f9;
 }
 
 .type-option.active {
-  border-width: 1.5px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 .type-option.request-active {
@@ -249,29 +283,50 @@ async function submitPost() {
   color: #047857;
 }
 
-/* flex `gap` already spaces these out; drop the inline-text margin */
-.type-option .inline-icon {
-  margin-right: 0;
+/* Category Grid */
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
 }
 
-.form-row {
+.cat-choice-btn {
   display: flex;
-  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 8px;
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: #475569;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
-.error-box {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #b91c1c;
-  padding: 10px;
-  border-radius: 8px;
-  font-size: 0.85rem;
-  margin-bottom: 14px;
+.cat-choice-btn:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
 }
 
-.empty-card {
-  text-align: center;
-  padding: 40px 20px;
+.cat-choice-btn.active {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: 0 2px 8px var(--primary-glow);
+}
+
+.cat-choice-icon {
+  flex-shrink: 0;
+}
+
+.label-with-hint {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
 }
 
 .label-with-btn {
@@ -279,6 +334,11 @@ async function submitPost() {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 6px;
+}
+
+.char-count {
+  font-size: 0.72rem;
+  color: #94a3b8;
 }
 
 .locate-badge-btn {
@@ -338,5 +398,35 @@ async function submitPost() {
 .geo-safety-text strong {
   font-weight: 700;
   color: #0f766e;
+}
+
+.publish-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 0.92rem;
+  padding: 12px;
+}
+
+.error-box {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  margin-bottom: 14px;
+}
+
+.empty-card {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+@media (max-width: 480px) {
+  .category-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 </style>

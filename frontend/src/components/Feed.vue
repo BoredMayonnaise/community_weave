@@ -1,41 +1,48 @@
 <template>
   <div class="feed-view">
-    <!-- Search & Neighborhood Filters -->
+    <!-- Search & Filters Header Card -->
     <div class="filter-card">
-      <div class="search-row">
-        <Search class="search-glyph" :size="16" />
-        <input
-          v-model="search"
-          @input="debouncedFetch"
-          type="text"
-          class="form-input search-input"
-          placeholder="Search requests & offers..."
-        />
-        <button v-if="search" class="clear-search-btn" @click="clearSearch" title="Clear search">
-          <X :size="14" />
+      <!-- Search & Area Row -->
+      <div class="search-filter-row">
+        <div class="search-box">
+          <Search class="search-glyph" :size="15" />
+          <input
+            v-model="search"
+            @input="debouncedFetch"
+            type="text"
+            class="form-input search-input"
+            placeholder="Search requests & offers..."
+          />
+          <button v-if="search" class="clear-search-btn" @click="clearSearch" title="Clear search">
+            <X :size="14" />
+          </button>
+        </div>
+
+        <div class="area-box">
+          <MapPin class="area-glyph" :size="14" />
+          <select v-model="selectedNeighborhood" @change="fetchPosts" class="area-select">
+            <option value="">All Areas</option>
+            <option v-for="n in neighborhoods" :key="n" :value="n">{{ n }}</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Horizontal Category Pills Bar -->
+      <div class="category-pills-wrap">
+        <button
+          v-for="cat in categories"
+          :key="cat.name"
+          type="button"
+          :class="['cat-pill', { active: selectedCategory === cat.name }]"
+          @click="selectCategory(cat.name)"
+        >
+          <component :is="cat.icon" :size="13" class="cat-pill-icon" />
+          <span>{{ cat.name }}</span>
         </button>
       </div>
 
-      <div class="filter-row">
-        <select v-model="selectedNeighborhood" @change="fetchPosts" class="form-select filter-select">
-          <option value="">All Areas / Barangays</option>
-          <option v-for="n in neighborhoods" :key="n" :value="n">{{ n }}</option>
-        </select>
-
-        <select v-model="selectedCategory" @change="fetchPosts" class="form-select filter-select">
-          <option value="All">All Categories</option>
-          <option value="Tools">Tools</option>
-          <option value="Food">Food</option>
-          <option value="Goods">Goods</option>
-          <option value="Skills">Skills</option>
-          <option value="Help">Help</option>
-          <option value="Other">Other</option>
-        </select>
-      </div>
-
-      <!-- View Mode & Type Bar -->
+      <!-- Segmented Type Selector & Quick Actions -->
       <div class="toolbar-row">
-        <!-- Segmented Type Selector -->
         <div class="type-segmented">
           <button
             type="button"
@@ -46,25 +53,26 @@
           </button>
           <button
             type="button"
-            :class="['segmented-btn', { active: activeType === 'request' }]"
+            :class="['segmented-btn', 'btn-req', { active: activeType === 'request' }]"
             @click="setType('request')"
           >
+            <HandHelping :size="13" class="type-btn-icon" />
             Requests
           </button>
           <button
             type="button"
-            :class="['segmented-btn', { active: activeType === 'offer' }]"
+            :class="['segmented-btn', 'btn-off', { active: activeType === 'offer' }]"
             @click="setType('offer')"
           >
+            <Gift :size="13" class="type-btn-icon" />
             Offers
           </button>
         </div>
 
-        <!-- Action Buttons -->
-        <div style="display: flex; gap: 6px; margin-left: auto;">
+        <div class="toolbar-actions">
           <button
             type="button"
-            class="map-shortcut-btn"
+            class="toolbar-btn"
             @click="fetchPosts"
             :disabled="loading"
             title="Refresh latest posts"
@@ -75,7 +83,7 @@
 
           <button
             type="button"
-            class="map-shortcut-btn"
+            class="toolbar-btn map-btn"
             @click="state.currentTab = 'map'"
             title="Explore neighborhood on map"
           >
@@ -86,7 +94,7 @@
       </div>
     </div>
 
-    <!-- Posts Feed -->
+    <!-- Posts Feed Area -->
     <div v-if="loading && posts.length === 0" class="state-msg">
       <div class="spinner"></div>
       <p>Finding neighborhood posts...</p>
@@ -115,12 +123,20 @@
           @click="openPost(post)"
         >
           <div class="post-header">
-            <span :class="['badge', post.type === 'offer' ? 'badge-offer' : 'badge-request']">
-              <component :is="post.type === 'offer' ? Gift : HandHelping" class="inline-icon" :size="12" />
-              {{ post.type === 'offer' ? 'Offer' : 'Request' }}
+            <div class="badges-group">
+              <span :class="['badge', post.type === 'offer' ? 'badge-offer' : 'badge-request']">
+                <component :is="post.type === 'offer' ? Gift : HandHelping" class="inline-icon" :size="12" />
+                {{ post.type === 'offer' ? 'Offer' : 'Request' }}
+              </span>
+              <span class="badge badge-category">
+                <component :is="getCategoryIcon(post.category)" :size="11" class="cat-badge-icon" />
+                {{ post.category }}
+              </span>
+            </div>
+            <span class="post-time">
+              <Clock :size="11" class="clock-glyph" />
+              {{ formatDate(post.created_at) }}
             </span>
-            <span class="badge badge-category">{{ post.category }}</span>
-            <span class="post-time">{{ formatDate(post.created_at) }}</span>
           </div>
 
           <h3 class="post-title">{{ post.title }}</h3>
@@ -136,7 +152,7 @@
             </span>
             <span class="author-tag">
               <span class="author-avatar-dot">{{ (post.author_display_name || 'N').charAt(0).toUpperCase() }}</span>
-              <span>{{ post.author_display_name }}</span>
+              <span class="author-name">{{ post.author_display_name }}</span>
             </span>
           </div>
         </div>
@@ -147,7 +163,10 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { Sprout, Search, X, Plus, Gift, HandHelping, MapPin, Map, RotateCw } from 'lucide-vue-next'
+import {
+  Sprout, Search, X, Plus, Gift, HandHelping, MapPin, Map, RotateCw,
+  Compass, Wrench, Utensils, Package, Sparkles, Layers, Clock
+} from 'lucide-vue-next'
 import { state } from '../state.js'
 import { api } from '../api.js'
 
@@ -157,6 +176,27 @@ const search = ref('')
 const activeType = ref('')
 const selectedNeighborhood = ref('')
 const selectedCategory = ref('All')
+
+const categories = [
+  { name: 'All', icon: Compass },
+  { name: 'Tools', icon: Wrench },
+  { name: 'Food', icon: Utensils },
+  { name: 'Goods', icon: Package },
+  { name: 'Skills', icon: Sparkles },
+  { name: 'Help', icon: HandHelping },
+  { name: 'Other', icon: Layers },
+]
+
+function getCategoryIcon(cat) {
+  switch (cat) {
+    case 'Tools': return Wrench
+    case 'Food': return Utensils
+    case 'Goods': return Package
+    case 'Skills': return Sparkles
+    case 'Help': return HandHelping
+    default: return Layers
+  }
+}
 
 const neighborhoods = ref(['Downtown', 'North Hills', 'Riverside', 'West End', 'Oakridge'])
 
@@ -174,6 +214,11 @@ onUnmounted(() => {
 
 function setType(type) {
   activeType.value = type
+  fetchPosts()
+}
+
+function selectCategory(catName) {
+  selectedCategory.value = catName
   fetchPosts()
 }
 
@@ -217,6 +262,16 @@ function goToCreate() {
 function formatDate(isoStr) {
   if (!isoStr) return ''
   const date = new Date(isoStr)
+  const now = new Date()
+  const diffSec = Math.floor((now - date) / 1000)
+  if (diffSec < 45) return 'Just now'
+  const diffMin = Math.floor(diffSec / 60)
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffHour = Math.floor(diffMin / 60)
+  if (diffHour < 24) return `${diffHour}h ago`
+  const diffDay = Math.floor(diffHour / 24)
+  if (diffDay === 1) return 'Yesterday'
+  if (diffDay < 7) return `${diffDay}d ago`
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
@@ -230,17 +285,24 @@ onMounted(() => {
 .filter-card {
   background: #ffffff;
   border-radius: var(--radius-md);
-  padding: 14px;
-  border: 1px solid rgba(226, 232, 240, 0.85);
+  padding: 14px 16px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
   margin-bottom: 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   box-shadow: var(--shadow-sm);
 }
 
-.search-row {
+.search-filter-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.search-box {
   position: relative;
+  flex: 1.3;
 }
 
 .search-glyph {
@@ -253,8 +315,8 @@ onMounted(() => {
 }
 
 .search-input {
-  padding: 10px 34px 10px 36px;
-  font-size: 0.9rem;
+  padding: 9px 34px 9px 36px;
+  font-size: 0.88rem;
   border-radius: 9999px;
   background: #f8fafc;
   border: 1px solid var(--border-color);
@@ -288,27 +350,93 @@ onMounted(() => {
   color: var(--text-main);
 }
 
-.filter-row {
-  display: flex;
-  gap: 8px;
+.area-box {
+  position: relative;
+  flex: 1;
+  min-width: 120px;
 }
 
-.filter-select {
-  flex: 1;
-  padding: 8px 12px;
-  font-size: 0.84rem;
+.area-glyph {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--primary);
+  pointer-events: none;
+}
+
+.area-select {
+  padding: 9px 12px 9px 32px;
+  font-size: 0.82rem;
   border-radius: 9999px;
   background: #f8fafc;
   border: 1px solid var(--border-color);
   color: #334155;
   font-weight: 500;
+  width: 100%;
+  outline: none;
+  transition: all 0.15s ease;
+  cursor: pointer;
 }
 
-.filter-select:focus {
+.area-select:focus {
   background: #ffffff;
   border-color: var(--primary);
 }
 
+/* Category Pills Bar */
+.category-pills-wrap {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 6px 2px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.category-pills-wrap::-webkit-scrollbar {
+  display: none;
+}
+
+.cat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
+  color: #475569;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.cat-pill:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: var(--text-main);
+}
+
+.cat-pill.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #ffffff;
+  box-shadow: 0 3px 10px var(--primary-glow);
+}
+
+.cat-pill:active {
+  transform: scale(0.96);
+}
+
+.cat-pill-icon {
+  flex-shrink: 0;
+}
+
+/* Toolbar & Segmented Controls */
 .toolbar-row {
   display: flex;
   align-items: center;
@@ -321,19 +449,23 @@ onMounted(() => {
   display: flex;
   background: #f1f5f9;
   padding: 3px;
-  border-radius: 10px;
+  border-radius: 12px;
 }
 
 .segmented-btn {
   flex: 1;
   border: none;
   background: transparent;
-  padding: 7px;
+  padding: 7px 10px;
   font-size: 0.82rem;
   font-weight: 600;
   color: var(--text-muted);
-  border-radius: 8px;
+  border-radius: 9px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -343,27 +475,61 @@ onMounted(() => {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
 }
 
-.map-shortcut-btn {
+.segmented-btn.btn-req.active {
+  color: var(--request-color);
+}
+
+.segmented-btn.btn-off.active {
+  color: var(--offer-color);
+}
+
+.type-btn-icon {
+  flex-shrink: 0;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.toolbar-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  background: var(--primary-light);
-  border: 1px solid rgba(13, 148, 136, 0.25);
-  color: var(--primary);
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
+  color: #475569;
   font-size: 0.78rem;
-  font-weight: 700;
+  font-weight: 600;
   padding: 6px 12px;
   border-radius: 9999px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
-.map-shortcut-btn:hover {
-  background: #ccfbf1;
-  border-color: var(--primary);
-  transform: translateY(-0.5px);
+.toolbar-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: var(--text-main);
 }
 
+.toolbar-btn:disabled {
+  opacity: 0.6;
+}
+
+.toolbar-btn.map-btn {
+  background: var(--primary-light);
+  border-color: rgba(13, 148, 136, 0.3);
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.toolbar-btn.map-btn:hover {
+  background: #ccfbf1;
+  border-color: var(--primary);
+}
+
+/* Post Cards */
 .posts-list {
   display: flex;
   flex-direction: column;
@@ -374,7 +540,7 @@ onMounted(() => {
   background: #ffffff;
   border: 1px solid rgba(226, 232, 240, 0.9);
   border-radius: var(--radius-md);
-  padding: 16px;
+  padding: 16px 18px;
   margin-bottom: 12px;
   box-shadow: var(--shadow-sm);
   transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s ease;
@@ -383,7 +549,7 @@ onMounted(() => {
 .post-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
-  border-color: rgba(13, 148, 136, 0.3);
+  border-color: rgba(13, 148, 136, 0.35);
 }
 
 .post-card:active {
@@ -393,15 +559,48 @@ onMounted(() => {
 .post-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   margin-bottom: 10px;
 }
 
+.badges-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.badge-category {
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cat-badge-icon {
+  color: #64748b;
+  flex-shrink: 0;
+}
+
 .post-time {
-  margin-left: auto;
   font-size: 0.72rem;
   color: var(--text-muted);
   font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.clock-glyph {
+  color: #94a3b8;
 }
 
 .post-title {
@@ -438,8 +637,8 @@ onMounted(() => {
   font-weight: 500;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  max-width: 68%;
+  gap: 5px;
+  max-width: 65%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -466,20 +665,26 @@ onMounted(() => {
   gap: 6px;
   font-weight: 600;
   color: #334155;
+  flex-shrink: 0;
 }
 
 .author-avatar-dot {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: linear-gradient(135deg, #0d9488 0%, #0284c7 100%);
   color: #ffffff;
-  font-size: 0.65rem;
+  font-size: 0.68rem;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.author-name {
+  font-size: 0.78rem;
 }
 
 .empty-box {
@@ -562,6 +767,13 @@ onMounted(() => {
   transform: scale(0.96);
 }
 
+@media (max-width: 480px) {
+  .search-filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
 /* Tablet Responsive Grid */
 @media (min-width: 640px) {
   .posts-list {
@@ -570,7 +782,7 @@ onMounted(() => {
     gap: 14px;
   }
   .filter-card {
-    padding: 14px 18px;
+    padding: 16px 20px;
   }
 }
 </style>
