@@ -131,7 +131,18 @@ const locating = ref(false)
 const searchQuery = ref('')
 const activeType = ref('')
 const selectedNeighborhood = ref('')
-const neighborhoods = ref(['Downtown', 'North Hills', 'Riverside', 'West End', 'Oakridge'])
+const neighborhoods = ref([
+  'Brgy. 171 Bagumbong, Caloocan',
+  'Brgy. 177 Camarin, Caloocan',
+  'Brgy. 170 Deparo, Caloocan',
+  'Grace Park West, Caloocan',
+  'Morning Breeze, Caloocan',
+  'Brgy. UP Campus, Diliman, QC',
+  'Brgy. Loyola Heights, QC',
+  'Brgy. 400 Sampaloc, Manila',
+  'Brgy. Poblacion, Makati',
+  'Brgy. Kapitolyo, Pasig'
+])
 const selectedPostPreview = ref(null)
 
 let map = null

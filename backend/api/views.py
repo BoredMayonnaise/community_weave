@@ -435,8 +435,20 @@ def neighborhoods_list(request):
         return resp
 
     names = Post.objects.values_list('neighborhood', flat=True).distinct()
-    defaults = ['Downtown', 'North Hills', 'Riverside', 'West End', 'Oakridge']
-    combined = sorted(set(defaults) | {n.strip() for n in names if n and n.strip()})
+    post_neighborhoods = {n.strip() for n in names if n and n.strip()}
+    defaults = [
+        'Brgy. 171 Bagumbong, Caloocan',
+        'Brgy. 177 Camarin, Caloocan',
+        'Brgy. 170 Deparo, Caloocan',
+        'Grace Park West, Caloocan',
+        'Morning Breeze, Caloocan',
+        'Brgy. UP Campus, Diliman, QC',
+        'Brgy. Loyola Heights, QC',
+        'Brgy. 400 Sampaloc, Manila',
+        'Brgy. Poblacion, Makati',
+        'Brgy. Kapitolyo, Pasig',
+    ]
+    combined = sorted(post_neighborhoods | set(defaults))
     cache.set(cache_key, combined, timeout=7200)
     resp = Response(combined)
     resp['Cache-Control'] = 'public, max-age=7200'
