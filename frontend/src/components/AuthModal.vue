@@ -100,7 +100,7 @@ async function handleSubmit() {
   inset: 0;
   background: rgba(15, 23, 42, 0.6);
   backdrop-filter: blur(4px);
-  z-index: 100;
+  z-index: 2000;
   display: flex;
   align-items: flex-end;
   justify-content: center;

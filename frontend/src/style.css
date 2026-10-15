@@ -78,7 +78,7 @@ body {
 .app-header {
   position: sticky;
   top: 0;
-  z-index: 40;
+  z-index: 1200;
   background-color: rgba(255, 255, 255, 0.88);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
@@ -276,11 +276,21 @@ body {
   flex-direction: column;
 }
 
-.app-content.in-chat,
-.app-content.in-map {
+.app-content.in-chat {
   padding: 0;
   overflow: hidden;
   height: 100%;
+}
+
+.app-content.in-map {
+  padding: 0 0 calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px)) 0;
+  overflow: hidden;
+  height: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  position: relative;
 }
 
 /* Bottom Nav */
@@ -299,7 +309,7 @@ body {
   display: flex;
   justify-content: space-around;
   align-items: flex-start;
-  z-index: 50;
+  z-index: 1200;
   padding: 6px 10px env(safe-area-inset-bottom, 8px) 10px;
 }
 
@@ -573,7 +583,7 @@ body {
   font-size: 0.88rem;
   font-weight: 500;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-  z-index: 100;
+  z-index: 9999;
   animation: slideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   border: 1px solid rgba(255, 255, 255, 0.1);
 }

@@ -1,5 +1,5 @@
 <template>
-  <div class="app-root">
+  <div :class="['app-root', { 'in-map-root': state.currentTab === 'map' && !state.selectedPost }]">
     <!-- Toast Notification -->
     <div v-if="state.toast" class="toast-banner">
       {{ state.toast }}
@@ -269,6 +269,23 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  min-height: 100dvh;
+  flex: 1;
+  width: 100%;
+}
+
+.app-root.in-map-root {
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+@media (min-width: 900px) {
+  .app-root.in-map-root {
+    height: 100%;
+    max-height: 100%;
+  }
 }
 
 .page-fade-enter-active,

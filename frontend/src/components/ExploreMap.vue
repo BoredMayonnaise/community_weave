@@ -259,7 +259,7 @@ function initMap() {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }).addTo(map)
 
-  L.control.zoom({ position: 'bottomright' }).addTo(map)
+  L.control.zoom({ position: 'topright' }).addTo(map)
 
   markersLayer = L.layerGroup().addTo(map)
 
@@ -411,9 +411,9 @@ onUnmounted(() => {
 .explore-map-view {
   position: relative;
   width: 100%;
-  height: calc(100vh - 62px - var(--bottom-nav-height));
-  height: calc(100dvh - 62px - var(--bottom-nav-height));
-  min-height: 500px;
+  height: 100%;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -425,7 +425,7 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   flex: 1;
-  min-height: 500px;
+  min-height: 0;
   overflow: hidden;
   background: #f1f5f9;
 }
@@ -433,7 +433,7 @@ onUnmounted(() => {
 .full-leaflet-map {
   width: 100%;
   height: 100%;
-  min-height: 500px;
+  min-height: 0;
   background: #f1f5f9;
 }
 
@@ -906,5 +906,34 @@ onUnmounted(() => {
 .slide-up-leave-to {
   opacity: 0;
   transform: translateY(20px);
+}
+
+:deep(.leaflet-top.leaflet-right) {
+  top: 104px;
+  right: 14px;
+}
+
+:deep(.leaflet-bar) {
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+:deep(.leaflet-bar a) {
+  background-color: #ffffff;
+  color: #1e293b;
+  border-bottom: 1px solid #f1f5f9;
+  width: 34px;
+  height: 34px;
+  line-height: 34px;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+:deep(.leaflet-bar a:hover) {
+  background-color: var(--primary-light);
+  color: var(--primary);
 }
 </style>
