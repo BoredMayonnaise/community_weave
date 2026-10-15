@@ -234,20 +234,31 @@
         Community Weave native app for connecting and sharing with your neighbors.
       </p>
 
-      <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center;">
-        <button class="btn btn-secondary" style="font-size: 0.8rem; flex: 1;" :disabled="checkingUpdate" @click="checkForAppUpdates">
-          <RefreshCw :size="13" :class="['inline-icon', { 'spin-icon': checkingUpdate }]" />
-          <span>{{ checkingUpdate ? 'Checking GitHub...' : 'Check for Updates' }}</span>
-        </button>
+      <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button class="btn btn-secondary" style="font-size: 0.8rem; flex: 1;" :disabled="checkingUpdate" @click="checkForAppUpdates">
+            <RefreshCw :size="13" :class="['inline-icon', { 'spin-icon': checkingUpdate }]" />
+            <span>{{ checkingUpdate ? 'Checking GitHub...' : 'Check for Updates' }}</span>
+          </button>
+          <a
+            v-if="latestRelease"
+            :href="latestApkUrl || latestRelease.html_url"
+            target="_blank"
+            class="btn btn-primary"
+            style="font-size: 0.8rem; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;"
+          >
+            <Download :size="13" />
+            <span>Download {{ latestRelease.tag_name }}</span>
+          </a>
+        </div>
         <a
-          v-if="latestRelease"
-          :href="latestApkUrl || latestRelease.html_url"
+          href="/install.html"
           target="_blank"
-          class="btn btn-primary"
-          style="font-size: 0.8rem; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;"
+          class="btn btn-secondary"
+          style="font-size: 0.8rem; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 6px; background: rgba(13, 148, 136, 0.08); border-color: rgba(13, 148, 136, 0.25); color: var(--primary); font-weight: 600;"
         >
-          <Download :size="13" />
-          <span>Download {{ latestRelease.tag_name }}</span>
+          <Smartphone :size="14" />
+          <span>Install Guide & Direct Downloads (APK & iOS)</span>
         </a>
       </div>
 
