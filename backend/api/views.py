@@ -1,11 +1,17 @@
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.authtoken.models import Token
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.db.models import Q
+from django.utils import timezone
+from django.core.cache import cache
 from .models import Profile, Post, Conversation, Message, Report
 from .serializers import (
     UserSerializer, PostSerializer, ConversationSerializer,
@@ -13,20 +19,70 @@ from .serializers import (
 )
 
 
+def get_posts_cache_version():
+    ver = cache.get('posts_cache_version')
+    if ver is None:
+        ver = 1
+        cache.set('posts_cache_version', ver, timeout=86400)
+    return ver
+
+
+def invalidate_posts_cache():
+    try:
+        cache.incr('posts_cache_version')
+    except (ValueError, TypeError):
+        cache.set('posts_cache_version', 1, timeout=86400)
+
+
+class AuthRateThrottle(AnonRateThrottle):
+    rate = '15/minute'
+
+
+class MessageRateThrottle(UserRateThrottle):
+    rate = '60/minute'
+
+
+def _clean_str(val):
+    return val.strip() if isinstance(val, str) else ''
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_classes([AuthRateThrottle])
 def register_view(request):
-    username = request.data.get('username', '').strip()
-    password = request.data.get('password', '')
-    display_name = request.data.get('display_name', '').strip() or username
-    neighborhood = request.data.get('neighborhood', '').strip()
+    username = _clean_str(request.data.get('username'))
+    password = str(request.data.get('password') or '')
+    display_name = _clean_str(request.data.get('display_name')) or username
+    neighborhood = _clean_str(request.data.get('neighborhood'))
 
     if not username or not password:
         return Response({'detail': 'Username and password are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if len(username) < 3 or len(username) > 50:
+        return Response({'detail': 'Username must be between 3 and 50 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if len(password) > 128:
+        return Response({'detail': 'Password cannot exceed 128 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if len(display_name) > 100:
+        display_name = display_name[:100]
+
+    if len(neighborhood) > 100:
+        neighborhood = neighborhood[:100]
+
+    try:
+        validate_password(password)
+    except ValidationError as e:
+        return Response({'detail': ' '.join(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
     if User.objects.filter(username__iexact=username).exists():
         return Response({'detail': 'Username already exists.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    user = User.objects.create_user(username=username, password=password)
+    try:
+        user = User.objects.create_user(username=username, password=password)
+    except IntegrityError:
+        return Response({'detail': 'Username already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+
     user.profile.display_name = display_name
     user.profile.neighborhood = neighborhood
     user.profile.save()
@@ -40,9 +96,10 @@ def register_view(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_classes([AuthRateThrottle])
 def login_view(request):
-    username = request.data.get('username', '').strip()
-    password = request.data.get('password', '')
+    username = _clean_str(request.data.get('username'))
+    password = str(request.data.get('password') or '')
 
     user = authenticate(username=username, password=password)
     if not user:
@@ -62,6 +119,60 @@ def logout_view(request):
     return Response({'detail': 'Logged out successfully.'})
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([AuthRateThrottle])
+def change_password_view(request):
+    old_password = str(request.data.get('old_password') or '')
+    new_password = str(request.data.get('new_password') or '')
+
+    if not old_password or not new_password:
+        return Response({'detail': 'Current password and new password are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = request.user
+    if not user.check_password(old_password):
+        return Response({'detail': 'Current password is incorrect.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if len(new_password) > 128:
+        return Response({'detail': 'Password cannot exceed 128 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        validate_password(new_password, user=user)
+    except ValidationError as e:
+        return Response({'detail': ' '.join(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
+    user.set_password(new_password)
+    user.save()
+
+    Token.objects.filter(user=user).delete()
+    new_token = Token.objects.create(user=user)
+
+    return Response({
+        'detail': 'Password changed successfully.',
+        'token': new_token.key
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([AuthRateThrottle])
+def delete_account_view(request):
+    password = str(request.data.get('password') or '')
+    if not password:
+        return Response({'detail': 'Password confirmation is required to delete your account.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = request.user
+    if not user.check_password(password):
+        return Response({'detail': 'Incorrect password. Account deletion canceled.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    Token.objects.filter(user=user).delete()
+    user.delete()
+    invalidate_posts_cache()
+    cache.delete('neighborhoods_list')
+
+    return Response({'detail': 'Your account and personal data have been permanently deleted.'})
+
+
 @api_view(['GET', 'PATCH'])
 @permission_classes([IsAuthenticated])
 def me_view(request):
@@ -69,10 +180,25 @@ def me_view(request):
     if request.method == 'PATCH':
         display_name = request.data.get('display_name')
         neighborhood = request.data.get('neighborhood')
-        if display_name is not None:
+        address = request.data.get('address')
+        latitude = request.data.get('latitude')
+        longitude = request.data.get('longitude')
+        if isinstance(display_name, str):
             user.profile.display_name = display_name.strip()
-        if neighborhood is not None:
+        if isinstance(neighborhood, str):
             user.profile.neighborhood = neighborhood.strip()
+        if isinstance(address, str):
+            user.profile.address = address.strip()
+        if latitude is not None:
+            try:
+                user.profile.latitude = float(latitude)
+            except (ValueError, TypeError):
+                pass
+        if longitude is not None:
+            try:
+                user.profile.longitude = float(longitude)
+            except (ValueError, TypeError):
+                pass
         user.profile.save()
     return Response(UserSerializer(user).data)
 
@@ -80,7 +206,23 @@ def me_view(request):
 @api_view(['GET', 'POST'])
 def posts_list_create(request):
     if request.method == 'GET':
-        posts = Post.objects.all()
+        allowed_params = ['status', 'type', 'category', 'neighborhood', 'search', 'author']
+        normalized_parts = []
+        for k in sorted(allowed_params):
+            v = request.query_params.get(k)
+            if v and v.strip():
+                normalized_parts.append(f"{k}={v.strip().lower()}")
+        norm_query = '&'.join(normalized_parts)
+        version = get_posts_cache_version()
+        cache_key = f"posts_feed_v{version}_{norm_query}"
+        cached_data = cache.get(cache_key)
+        if cached_data is not None:
+            resp = Response(cached_data)
+            resp['Cache-Control'] = 'public, max-age=15'
+            resp['X-Cache'] = 'HIT'
+            return resp
+
+        posts = Post.objects.select_related('author__profile').all()
 
         status_param = request.query_params.get('status', 'open')
         if status_param != 'all':
@@ -107,14 +249,29 @@ def posts_list_create(request):
             posts = posts.filter(author__username=author)
 
         serializer = PostSerializer(posts, many=True)
-        return Response(serializer.data)
+        data = serializer.data
+        cache.set(cache_key, data, timeout=15)
+        resp = Response(data)
+        resp['Cache-Control'] = 'public, max-age=15'
+        resp['X-Cache'] = 'MISS'
+        return resp
 
     if request.method == 'POST':
         if not request.user.is_authenticated:
             return Response({'detail': 'Authentication required.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        title = request.data.get('title')
+        description = request.data.get('description')
+        if isinstance(title, str) and len(title.strip()) > 200:
+            return Response({'detail': 'Title cannot exceed 200 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+        if isinstance(description, str) and len(description.strip()) > 5000:
+            return Response({'detail': 'Description cannot exceed 5,000 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+
         serializer = PostSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(author=request.user)
+            invalidate_posts_cache()
+            cache.delete('neighborhoods_list')
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -139,11 +296,15 @@ def post_detail(request, pk):
         serializer = PostSerializer(post, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
+            invalidate_posts_cache()
+            cache.delete('neighborhoods_list')
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     if request.method == 'DELETE':
         post.delete()
+        invalidate_posts_cache()
+        cache.delete('neighborhoods_list')
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -151,17 +312,21 @@ def post_detail(request, pk):
 @permission_classes([IsAuthenticated])
 def conversations_list_create(request):
     user = request.user
+    Profile.objects.filter(user=user).update(last_active=timezone.now())
+
     if request.method == 'GET':
-        conversations = Conversation.objects.filter(Q(requester=user) | Q(owner=user))
-        return Response(ConversationSerializer(conversations, many=True).data)
+        conversations = Conversation.objects.filter(
+            Q(requester=user) | Q(owner=user)
+        ).select_related('post', 'requester__profile', 'owner__profile').prefetch_related('messages', 'messages__sender')
+        return Response(ConversationSerializer(conversations, many=True, context={'request': request}).data)
 
     if request.method == 'POST':
         post_id = request.data.get('post_id')
-        if not post_id:
-            return Response({'detail': 'post_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not post_id or not str(post_id).isdigit():
+            return Response({'detail': 'Valid post_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            post = Post.objects.get(pk=post_id)
+            post = Post.objects.get(pk=int(post_id))
         except Post.DoesNotExist:
             return Response({'detail': 'Post not found.'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -174,16 +339,20 @@ def conversations_list_create(request):
             defaults={'owner': post.author}
         )
 
-        initial_message = request.data.get('message', '').strip()
+        initial_message = _clean_str(request.data.get('message'))
         if initial_message:
             Message.objects.create(conversation=conv, sender=user, text=initial_message)
+            conv.save()
 
-        return Response(ConversationSerializer(conv).data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+        return Response(ConversationSerializer(conv, context={'request': request}).data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
 
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([MessageRateThrottle])
 def conversation_messages(request, pk):
+    Profile.objects.filter(user=request.user).update(last_active=timezone.now())
+
     try:
         conv = Conversation.objects.get(pk=pk)
     except Conversation.DoesNotExist:
@@ -193,13 +362,20 @@ def conversation_messages(request, pk):
         return Response({'detail': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
 
     if request.method == 'GET':
-        messages = conv.messages.all()
+        # Mark incoming unread messages as read (Seen status)
+        conv.messages.filter(~Q(sender=request.user), is_read=False).update(
+            is_read=True,
+            read_at=timezone.now()
+        )
+        messages = conv.messages.select_related('sender').all()
         return Response(MessageSerializer(messages, many=True).data)
 
     if request.method == 'POST':
-        text = request.data.get('text', '').strip()
+        text = _clean_str(request.data.get('text'))
         if not text:
             return Response({'detail': 'Text cannot be empty.'}, status=status.HTTP_400_BAD_REQUEST)
+        if len(text) > 2000:
+            return Response({'detail': 'Message cannot exceed 2,000 characters.'}, status=status.HTTP_400_BAD_REQUEST)
         msg = Message.objects.create(conversation=conv, sender=request.user, text=text)
         conv.save()  # update timestamp
         return Response(MessageSerializer(msg).data, status=status.HTTP_201_CREATED)
@@ -207,17 +383,58 @@ def conversation_messages(request, pk):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+def ping_view(request):
+    now = timezone.now()
+    Profile.objects.filter(user=request.user).update(last_active=now)
+    return Response({'status': 'ok', 'is_online': True, 'last_active': now.isoformat()})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([AuthRateThrottle])
 def report_post(request):
     post_id = request.data.get('post_id')
-    reason = request.data.get('reason', '').strip()
+    reason = _clean_str(request.data.get('reason'))
 
-    if not post_id or not reason:
-        return Response({'detail': 'post_id and reason are required.'}, status=status.HTTP_400_BAD_REQUEST)
+    if not post_id or not str(post_id).isdigit() or not reason:
+        return Response({'detail': 'Valid post_id and reason are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        post = Post.objects.get(pk=post_id)
+        post = Post.objects.get(pk=int(post_id))
     except Post.DoesNotExist:
         return Response({'detail': 'Post not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-    report = Report.objects.create(reporter=request.user, post=post, reason=reason)
+    # Prevent a single user from spamming multiple reports on the same post
+    if Report.objects.filter(reporter=request.user, post=post).exists():
+        return Response({'detail': 'You have already reported this post.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    report = Report.objects.create(reporter=request.user, post=post, reason=reason[:500])
+
+    # Auto-quarantine: If 3 or more unique neighbors report the post, flag it from public feed
+    if post.reports.count() >= 3 and post.status == 'open':
+        post.status = 'flagged'
+        post.save(update_fields=['status'])
+        invalidate_posts_cache()
+
     return Response(ReportSerializer(report).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+def neighborhoods_list(request):
+    cache_key = 'neighborhoods_list'
+    cached = cache.get(cache_key)
+    if cached is not None:
+        resp = Response(cached)
+        resp['Cache-Control'] = 'public, max-age=7200'
+        resp['X-Cache'] = 'HIT'
+        return resp
+
+    names = Post.objects.values_list('neighborhood', flat=True).distinct()
+    defaults = ['Downtown', 'North Hills', 'Riverside', 'West End', 'Oakridge']
+    combined = sorted(set(defaults) | {n.strip() for n in names if n and n.strip()})
+    cache.set(cache_key, combined, timeout=7200)
+    resp = Response(combined)
+    resp['Cache-Control'] = 'public, max-age=7200'
+    resp['X-Cache'] = 'MISS'
+    return resp
+

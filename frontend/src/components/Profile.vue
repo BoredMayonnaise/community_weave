@@ -1,7 +1,7 @@
 <template>
   <div class="profile-view">
     <div v-if="!state.user" class="card empty-card">
-      <div class="empty-icon">👤</div>
+      <LockKeyhole class="empty-icon" :size="40" />
       <h3>Neighbor Profile</h3>
       <p>Sign in to manage your posts, profile, and neighborhood settings.</p>
       <button class="btn btn-primary" style="margin-top: 16px" @click="openAuth">
@@ -12,24 +12,53 @@
     <div v-else>
       <!-- User Card -->
       <div class="card user-card">
-        <div class="avatar-circle">
-          {{ (state.user.profile?.display_name || state.user.username)[0].toUpperCase() }}
+        <div class="user-card-top">
+          <div class="avatar-circle">
+            {{ (state.user.profile?.display_name || state.user.username)[0].toUpperCase() }}
+          </div>
+          <div class="user-info">
+            <h3 class="user-name">{{ state.user.profile?.display_name || state.user.username }}</h3>
+            <span class="user-handle">@{{ state.user.username }}</span>
+            <span class="user-neighborhood"><MapPin class="inline-icon" :size="14" />{{ state.user.profile?.neighborhood || 'No neighborhood set' }}</span>
+          </div>
         </div>
-        <div class="user-info">
-          <h3 class="user-name">{{ state.user.profile?.display_name || state.user.username }}</h3>
-          <span class="user-handle">@{{ state.user.username }}</span>
-          <span class="user-neighborhood">📍 {{ state.user.profile?.neighborhood || 'No neighborhood set' }}</span>
+
+        <div class="user-stats-row">
+          <div class="stat-pill">
+            <span class="stat-num">{{ myPosts.length }}</span>
+            <span class="stat-label">Total</span>
+          </div>
+          <div class="stat-pill">
+            <span class="stat-num stat-active">{{ activeCount }}</span>
+            <span class="stat-label">Active</span>
+          </div>
+          <div class="stat-pill">
+            <span class="stat-num stat-closed">{{ closedCount }}</span>
+            <span class="stat-label">Resolved</span>
+          </div>
         </div>
       </div>
 
       <!-- Quick Edit Neighborhood / Display Name -->
       <div class="card edit-card">
-        <h4 style="font-size: 0.95rem; margin-bottom: 12px">Update Neighborhood</h4>
+        <div class="edit-card-header">
+          <h4 style="font-size: 0.95rem">Update Barangay / Neighborhood</h4>
+          <button
+            type="button"
+            class="locate-badge-btn"
+            @click="autoLocateNeighborhood"
+            :disabled="locating"
+            title="Auto-detect from GPS"
+          >
+            <LocateFixed :size="12" />
+            <span>{{ locating ? 'Locating...' : 'Use My GPS' }}</span>
+          </button>
+        </div>
         <div class="form-row">
           <input
             v-model="editNeighborhood"
             class="form-input"
-            placeholder="e.g. North Hills"
+            placeholder="e.g. Brgy. Zone 15, Cadiz or Downtown"
           />
           <button class="btn btn-secondary" :disabled="savingProfile" @click="saveProfile">
             {{ savingProfile ? '...' : 'Save' }}
@@ -54,6 +83,7 @@
           <div v-for="post in myPosts" :key="post.id" class="card my-post-card">
             <div class="post-top">
               <span :class="['badge', post.type === 'offer' ? 'badge-offer' : 'badge-request']">
+                <component :is="post.type === 'offer' ? Gift : HandHelping" class="inline-icon" :size="12" />
                 {{ post.type === 'offer' ? 'Offer' : 'Request' }}
               </span>
               <span :class="['badge', post.status === 'open' ? 'badge-offer' : 'badge-closed']">
@@ -63,10 +93,18 @@
 
             <h4 class="post-title" @click="openPost(post)">{{ post.title }}</h4>
 
+            <div class="my-post-loc">
+              <MapPin class="loc-pin" :size="12" />
+              <span class="loc-main">{{ post.neighborhood }}</span>
+              <span v-if="post.address && post.address !== post.neighborhood" class="loc-sub">
+                • {{ post.address }}
+              </span>
+            </div>
+
             <div class="post-actions">
               <button
                 v-if="post.status === 'open'"
-                class="btn-text text-danger"
+                class="btn-text"
                 @click="togglePostStatus(post, 'closed')"
               >
                 Mark Closed
@@ -78,7 +116,86 @@
               >
                 Reopen Post
               </button>
-              <button class="btn-text" @click="openPost(post)">View →</button>
+              <button class="btn-text text-danger" @click="deletePost(post)">Delete</button>
+              <button class="btn-text" @click="openPost(post)">View <ArrowRight class="inline-icon-end" :size="14" /></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Security & Privacy Settings -->
+      <div class="card security-card">
+        <div class="security-card-header" @click="showSecuritySection = !showSecuritySection">
+          <div class="security-header-title">
+            <ShieldCheck class="inline-icon" :size="16" />
+            <span>Security & Privacy</span>
+          </div>
+          <button type="button" class="btn-text">
+            {{ showSecuritySection ? 'Hide' : 'Manage' }}
+          </button>
+        </div>
+
+        <div v-if="showSecuritySection" class="security-card-body">
+          <!-- Change Password -->
+          <div class="security-subblock">
+            <h5 class="subblock-title">Change Password</h5>
+            <div v-if="passwordSuccess" class="success-box">{{ passwordSuccess }}</div>
+            <div v-if="passwordError" class="error-box">{{ passwordError }}</div>
+            <div class="password-form">
+              <input
+                v-model="oldPassword"
+                type="password"
+                autocomplete="current-password"
+                class="form-input"
+                placeholder="Current password"
+              />
+              <input
+                v-model="newPassword"
+                type="password"
+                autocomplete="new-password"
+                class="form-input"
+                placeholder="New password (min 8 chars)"
+              />
+              <button
+                class="btn btn-secondary btn-block"
+                :disabled="savingPassword || !oldPassword || !newPassword"
+                @click="handleChangePassword"
+              >
+                {{ savingPassword ? 'Updating...' : 'Update Password' }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Delete Account -->
+          <div class="security-subblock danger-zone">
+            <h5 class="subblock-title text-danger">Delete Account & Data</h5>
+            <p class="danger-desc">
+              Permanently remove your account, profile, listings, and messages. This action cannot be undone.
+            </p>
+            <div v-if="!showDeleteConfirm">
+              <button class="btn btn-outline-danger btn-block" @click="showDeleteConfirm = true">
+                Delete My Account
+              </button>
+            </div>
+            <div v-else class="delete-confirm-box">
+              <label class="form-label" style="font-size: 0.78rem">Confirm password to delete:</label>
+              <input
+                v-model="deleteConfirmPassword"
+                type="password"
+                class="form-input"
+                placeholder="Enter your password"
+              />
+              <div class="delete-btn-row">
+                <button class="btn btn-secondary" style="flex: 1" @click="showDeleteConfirm = false">Cancel</button>
+                <button
+                  class="btn btn-danger"
+                  style="flex: 1"
+                  :disabled="deletingAccount || !deleteConfirmPassword"
+                  @click="handleDeleteAccount"
+                >
+                  {{ deletingAccount ? 'Deleting...' : 'Permanently Delete' }}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -89,18 +206,154 @@
         Sign Out
       </button>
     </div>
+
+    <!-- Server Connection Card -->
+    <div class="card server-card" style="margin-top: 16px;">
+      <div class="server-card-header" @click="showServerSection = !showServerSection" style="cursor: pointer; display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <Globe class="inline-icon" :size="16" />
+          <span style="font-weight: 600; font-size: 0.92rem;">API Server</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="badge badge-offer" style="font-size: 0.72rem; text-transform: none; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            {{ currentServerHost }}
+          </span>
+          <button type="button" class="btn-text" style="font-size: 0.78rem;">
+            {{ showServerSection ? 'Hide' : 'Configure' }}
+          </button>
+        </div>
+      </div>
+
+      <div v-if="showServerSection" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color, #e2e8f0);">
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">
+          Active API: <strong style="color: var(--text-color, #0f172a); font-family: monospace; font-size: 0.76rem;">{{ activeServerUrl }}</strong>
+        </p>
+        <div class="form-row" style="display: flex; gap: 8px;">
+          <input
+            v-model="customServerUrl"
+            class="form-input"
+            style="flex: 1; font-size: 0.82rem;"
+            :placeholder="DEFAULT_LIVE_API_URL"
+          />
+          <button class="btn btn-secondary" style="white-space: nowrap; font-size: 0.82rem;" @click="saveServerUrl">
+            Save
+          </button>
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 8px; align-items: center;">
+          <button class="btn-text" style="font-size: 0.78rem;" @click="resetServerUrl">
+            Reset to DuckDNS
+          </button>
+          <button class="btn-text text-primary" style="font-size: 0.78rem; margin-left: auto;" :disabled="testingConnection" @click="testServerConnection">
+            {{ testingConnection ? 'Pinging...' : 'Test Ping' }}
+          </button>
+        </div>
+        <div v-if="serverPingResult" :class="['state-msg', serverPingSuccess ? 'text-success' : 'text-danger']" style="font-size: 0.78rem; margin-top: 8px; padding: 6px 10px; border-radius: 6px; background: rgba(0,0,0,0.03);">
+          {{ serverPingResult }}
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { LockKeyhole, MapPin, ArrowRight, Gift, HandHelping, LocateFixed, ShieldCheck, Globe } from 'lucide-vue-next'
 import { state } from '../state.js'
-import { api } from '../api.js'
+import { api, getApiBaseUrl, setApiBaseUrl, DEFAULT_LIVE_API_URL } from '../api.js'
+import { geo } from '../geo.js'
 
 const editNeighborhood = ref('')
 const savingProfile = ref(false)
+const locating = ref(false)
 const myPosts = ref([])
 const loadingPosts = ref(false)
+
+const showSecuritySection = ref(false)
+const oldPassword = ref('')
+const newPassword = ref('')
+const savingPassword = ref(false)
+const passwordSuccess = ref('')
+const passwordError = ref('')
+
+const showDeleteConfirm = ref(false)
+const deleteConfirmPassword = ref('')
+const deletingAccount = ref(false)
+
+const showServerSection = ref(false)
+const customServerUrl = ref(localStorage.getItem('cw_server_url') || '')
+const activeServerUrl = ref(getApiBaseUrl())
+const testingConnection = ref(false)
+const serverPingResult = ref('')
+const serverPingSuccess = ref(false)
+
+const currentServerHost = computed(() => {
+  try {
+    const url = new URL(activeServerUrl.value.startsWith('http') ? activeServerUrl.value : window.location.origin + activeServerUrl.value)
+    return url.hostname
+  } catch {
+    return 'duckdns.org'
+  }
+})
+
+function saveServerUrl() {
+  setApiBaseUrl(customServerUrl.value)
+  activeServerUrl.value = getApiBaseUrl()
+  state.showToast(`Server endpoint updated: ${activeServerUrl.value}`)
+  serverPingResult.value = ''
+}
+
+function resetServerUrl() {
+  setApiBaseUrl('')
+  customServerUrl.value = ''
+  activeServerUrl.value = getApiBaseUrl()
+  state.showToast('Reset to default DuckDNS endpoint')
+  serverPingResult.value = ''
+}
+
+async function testServerConnection() {
+  testingConnection.value = true
+  serverPingResult.value = ''
+  try {
+    const base = activeServerUrl.value
+    const res = await fetch(`${base}/posts/`, { signal: AbortSignal.timeout(6000) })
+    if (res.ok) {
+      serverPingSuccess.value = true
+      serverPingResult.value = `Connected successfully! (HTTP ${res.status})`
+    } else {
+      serverPingSuccess.value = false
+      serverPingResult.value = `Server responded with HTTP ${res.status}`
+    }
+  } catch (err) {
+    serverPingSuccess.value = false
+    serverPingResult.value = `Could not reach server: ${err.message}`
+  } finally {
+    testingConnection.value = false
+  }
+}
+
+const activeCount = computed(() => myPosts.value.filter(p => p.status === 'open').length)
+const closedCount = computed(() => myPosts.value.filter(p => p.status === 'closed').length)
+
+async function autoLocateNeighborhood() {
+  locating.value = true
+  try {
+    const loc = await geo.locateUser()
+    editNeighborhood.value = loc.neighborhood
+    const updated = await api.updateProfile({
+      neighborhood: loc.neighborhood,
+      address: loc.address,
+      latitude: loc.latitude,
+      longitude: loc.longitude
+    })
+    state.user = updated
+    localStorage.setItem('cw_user', JSON.stringify(updated))
+    state.showToast(`Updated to ${loc.neighborhood}!`)
+  } catch (err) {
+    state.showToast(err.message || 'Could not detect location')
+  } finally {
+    locating.value = false
+  }
+}
 
 function openAuth() {
   state.showAuthModal = true
@@ -118,6 +371,45 @@ function goToCreate() {
 function logout() {
   api.logout().catch(() => {})
   state.logout()
+}
+
+async function handleChangePassword() {
+  if (!oldPassword.value || !newPassword.value) return
+  savingPassword.value = true
+  passwordSuccess.value = ''
+  passwordError.value = ''
+  try {
+    const res = await api.changePassword({
+      old_password: oldPassword.value,
+      new_password: newPassword.value
+    })
+    if (res.token) {
+      state.token = res.token
+      localStorage.setItem('cw_token', res.token)
+    }
+    passwordSuccess.value = 'Password updated successfully!'
+    oldPassword.value = ''
+    newPassword.value = ''
+    state.showToast('Password changed successfully!')
+  } catch (err) {
+    passwordError.value = err.message || 'Failed to change password'
+  } finally {
+    savingPassword.value = false
+  }
+}
+
+async function handleDeleteAccount() {
+  if (!deleteConfirmPassword.value) return
+  deletingAccount.value = true
+  try {
+    await api.deleteAccount({ password: deleteConfirmPassword.value })
+    state.logout()
+    state.showToast('Account permanently deleted.')
+  } catch (err) {
+    state.showToast(err.message || 'Failed to delete account')
+  } finally {
+    deletingAccount.value = false
+  }
 }
 
 async function saveProfile() {
@@ -157,9 +449,27 @@ async function togglePostStatus(post, newStatus) {
   }
 }
 
+async function deletePost(post) {
+  if (!confirm('Are you sure you want to delete this post?')) return
+  try {
+    await api.deletePost(post.id)
+    myPosts.value = myPosts.value.filter(p => p.id !== post.id)
+    state.showToast('Post deleted.')
+  } catch (err) {
+    state.showToast(err.message || 'Could not delete post')
+  }
+}
+
 onMounted(() => {
   if (state.user) {
     editNeighborhood.value = state.user.profile?.neighborhood || ''
+    fetchMyPosts()
+  }
+})
+
+watch(() => state.user, (u) => {
+  if (u) {
+    editNeighborhood.value = u.profile?.neighborhood || ''
     fetchMyPosts()
   }
 })
@@ -171,35 +481,84 @@ onMounted(() => {
   padding: 40px 20px;
 }
 
-.empty-icon {
-  font-size: 2.5rem;
-  margin-bottom: 10px;
-}
-
 .user-card {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 16px;
   padding: 18px;
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: var(--shadow-sm);
+}
+
+.user-card-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.user-stats-row {
+  display: flex;
+  gap: 8px;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 14px;
+}
+
+.stat-pill {
+  flex: 1;
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 8px 6px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stat-num {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+}
+
+.stat-num.stat-active {
+  color: var(--primary);
+}
+
+.stat-num.stat-closed {
+  color: #64748b;
+}
+
+.stat-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  margin-top: 3px;
 }
 
 .avatar-circle {
-  width: 52px;
-  height: 52px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
-  background: var(--primary);
+  background: linear-gradient(135deg, var(--primary) 0%, #14b8a6 100%);
   color: #ffffff;
-  font-size: 1.4rem;
+  font-size: 1.5rem;
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 4px 12px var(--primary-glow);
 }
 
 .user-name {
   font-size: 1.15rem;
   font-weight: 700;
   color: #0f172a;
+  letter-spacing: -0.015em;
 }
 
 .user-handle {
@@ -212,8 +571,40 @@ onMounted(() => {
   display: block;
   font-size: 0.82rem;
   color: var(--primary);
-  font-weight: 500;
-  margin-top: 2px;
+  font-weight: 600;
+  margin-top: 3px;
+}
+
+.edit-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.locate-badge-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--primary-light);
+  border: 1px solid rgba(13, 148, 136, 0.3);
+  color: var(--primary);
+  border-radius: 9999px;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.locate-badge-btn:hover:not(:disabled) {
+  background: #ccfbf1;
+  border-color: var(--primary);
+}
+
+.locate-badge-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 .form-row {
@@ -247,7 +638,31 @@ onMounted(() => {
   font-weight: 600;
   color: #1e293b;
   cursor: pointer;
+  margin-bottom: 6px;
+}
+
+.my-post-loc {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: #64748b;
   margin-bottom: 10px;
+}
+
+.my-post-loc .loc-pin {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.my-post-loc .loc-main {
+  font-weight: 600;
+  color: #334155;
+}
+
+.my-post-loc .loc-sub {
+  color: #64748b;
+  font-weight: 400;
 }
 
 .post-actions {
@@ -284,5 +699,113 @@ onMounted(() => {
   text-align: center;
   padding: 20px;
   color: #94a3b8;
+}
+
+/* Security & Privacy Card */
+.security-card {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+}
+
+.security-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.security-header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.security-header-title .inline-icon {
+  color: var(--primary);
+}
+
+.security-card-body {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.security-subblock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.subblock-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #334155;
+  margin: 0;
+}
+
+.password-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.danger-zone {
+  padding-top: 12px;
+  border-top: 1px dashed #fecdd3;
+}
+
+.danger-desc {
+  font-size: 0.78rem;
+  color: #64748b;
+  line-height: 1.4;
+  margin: 0 0 4px 0;
+}
+
+.delete-confirm-box {
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.delete-btn-row {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-outline-danger {
+  background: transparent;
+  border: 1px solid #fca5a5;
+  color: #dc2626;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-outline-danger:hover {
+  background: #fef2f2;
+  border-color: #dc2626;
+}
+
+.success-box {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+  font-size: 0.78rem;
+  padding: 6px 10px;
+  border-radius: 6px;
 }
 </style>

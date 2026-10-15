@@ -8,6 +8,17 @@ class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     display_name = models.CharField(max_length=100, blank=True)
     neighborhood = models.CharField(max_length=100, blank=True)
+    address = models.CharField(max_length=255, blank=True, default='')
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
+    last_active = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def is_online(self):
+        if not self.last_active:
+            return False
+        from django.utils import timezone
+        return (timezone.now() - self.last_active).total_seconds() < 120
 
     def __str__(self):
         return self.display_name or self.user.username
@@ -30,16 +41,20 @@ class Post(models.Model):
     STATUS_CHOICES = [
         ('open', 'Open'),
         ('closed', 'Closed'),
+        ('flagged', 'Flagged'),
     ]
 
     author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='posts')
-    type = models.CharField(max_length=10, choices=TYPE_CHOICES, default='request')
+    type = models.CharField(max_length=10, choices=TYPE_CHOICES, default='request', db_index=True)
     title = models.CharField(max_length=200)
     description = models.TextField()
-    category = models.CharField(max_length=50, default='General')
-    neighborhood = models.CharField(max_length=100)
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='open')
-    created_at = models.DateTimeField(auto_now_add=True)
+    category = models.CharField(max_length=50, default='General', db_index=True)
+    neighborhood = models.CharField(max_length=100, db_index=True)
+    address = models.CharField(max_length=255, blank=True, default='')
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='open', db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
         ordering = ['-created_at']
@@ -49,7 +64,7 @@ class Post(models.Model):
 
 
 class Conversation(models.Model):
-    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='conversations')
+    post = models.ForeignKey(Post, on_delete=models.SET_NULL, null=True, blank=True, related_name='conversations')
     requester = models.ForeignKey(User, on_delete=models.CASCADE, related_name='requested_conversations')
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='owned_conversations')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -67,7 +82,9 @@ class Message(models.Model):
     conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='messages')
     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')
     text = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
+    is_read = models.BooleanField(default=False, db_index=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
         ordering = ['created_at']

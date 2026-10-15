@@ -1,0 +1,9 @@
+{
+  "appId": "com.communityweave.app",
+  "appName": "Community Weave",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  }
+}

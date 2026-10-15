@@ -1,0 +1,108 @@
+name: Build Mobile Apps (Android APK & iOS)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: npm ci || npm install
+
+      - name: Build Web App & Sync Capacitor Android
+        working-directory: frontend
+        run: |
+          npm run build
+          npx cap sync android
+
+      - name: Make Gradle Wrapper Executable
+        working-directory: frontend/android
+        run: chmod +x gradlew
+
+      - name: Build Android Debug APK
+        working-directory: frontend/android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: community-weave-android-apk
+          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+
+  build-ios:
+    name: Build iOS App
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: npm ci || npm install
+
+      - name: Build Web App & Sync Capacitor iOS
+        working-directory: frontend
+        run: |
+          npm run build
+          npx cap sync ios
+
+      - name: Build iOS App (Unsigned)
+        working-directory: frontend/ios/App
+        run: |
+          xcodebuild -workspace App.xcworkspace \
+            -scheme App \
+            -destination 'generic/platform=iOS' \
+            -configuration Debug \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_IDENTITY="" \
+            clean build
+
+      - name: Archive iOS App
+        working-directory: frontend/ios/App
+        run: |
+          mkdir -p build-output
+          if [ -d "build/Build/Products/Debug-iphoneos/App.app" ]; then
+            cd build/Build/Products/Debug-iphoneos && zip -r ../../../../build-output/CommunityWeave-iOS-Debug.zip App.app
+          elif [ -d "build/Debug-iphoneos/App.app" ]; then
+            cd build/Debug-iphoneos && zip -r ../../../build-output/CommunityWeave-iOS-Debug.zip App.app
+          fi
+
+      - name: Upload iOS App Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: community-weave-ios-app
+          path: frontend/ios/App/build-output/*.zip
+          retention-days: 14

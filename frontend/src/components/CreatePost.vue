@@ -1,7 +1,7 @@
 <template>
   <div class="create-view">
     <div v-if="!state.user" class="card empty-card">
-      <div class="empty-icon">🔐</div>
+      <LockKeyhole class="empty-icon" :size="40" />
       <h3>Sign in to Post</h3>
       <p>You need to be signed in to post requests or offers to your neighborhood.</p>
       <button class="btn btn-primary" style="margin-top: 16px" @click="openAuth">
@@ -22,17 +22,17 @@
           <div class="type-selector">
             <button
               type="button"
-              :class="['type-option', { active: form.type === 'request' }]"
+              :class="['type-option', { 'request-active active': form.type === 'request' }]"
               @click="form.type = 'request'"
             >
-              🙋 Request (Need help)
+              <HandHelping class="inline-icon" :size="16" /> Request (Need help)
             </button>
             <button
               type="button"
-              :class="['type-option', { active: form.type === 'offer' }]"
+              :class="['type-option', { 'offer-active active': form.type === 'offer' }]"
               @click="form.type = 'offer'"
             >
-              🎁 Offer (Can share)
+              <Gift class="inline-icon" :size="16" /> Offer (Can share)
             </button>
           </div>
         </div>
@@ -61,13 +61,44 @@
           </div>
 
           <div class="form-group" style="flex: 1">
-            <label class="form-label">Neighborhood</label>
+            <div class="label-with-btn">
+              <label class="form-label" style="margin-bottom: 0">Barangay / Neighborhood</label>
+              <button
+                type="button"
+                class="locate-badge-btn"
+                @click="autoLocate"
+                :disabled="locating"
+                title="Auto-detect from GPS"
+              >
+                <LocateFixed :size="12" />
+                <span>{{ locating ? 'Locating...' : 'Locate Me' }}</span>
+              </button>
+            </div>
             <input
               v-model="form.neighborhood"
               class="form-input"
               required
-              placeholder="e.g. Downtown"
+              placeholder="e.g. Brgy. Zone 15, Cadiz or Downtown"
+              list="neighborhood-options"
             />
+            <datalist id="neighborhood-options">
+              <option v-for="n in neighborhoods" :key="n" :value="n" />
+            </datalist>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Approximate Address or Pickup Spot <span class="optional-label">(Optional)</span></label>
+          <input
+            v-model="form.address"
+            class="form-input"
+            placeholder="e.g. Rizal St. or Near City Hall"
+          />
+          <div class="geo-safety-box">
+            <ShieldCheck :size="15" class="geo-safety-icon" />
+            <div class="geo-safety-text">
+              <strong>Privacy Protection:</strong> Your exact doorstep is never shared publicly. Neighbors only see a safe approximate ~400m area on the map.
+            </div>
           </div>
         </div>
 
@@ -92,17 +123,24 @@
 
 <script setup>
 import { reactive, ref, onMounted } from 'vue'
+import { LockKeyhole, HandHelping, Gift, LocateFixed, ShieldCheck } from 'lucide-vue-next'
 import { state } from '../state.js'
 import { api } from '../api.js'
+import { geo } from '../geo.js'
 
 const submitting = ref(false)
+const locating = ref(false)
 const error = ref('')
+const neighborhoods = ref(['Downtown', 'North Hills', 'Riverside', 'West End', 'Oakridge'])
 
 const form = reactive({
   type: 'request',
   title: '',
   category: 'Tools',
   neighborhood: '',
+  address: '',
+  latitude: null,
+  longitude: null,
   description: '',
 })
 
@@ -110,10 +148,30 @@ function openAuth() {
   state.showAuthModal = true
 }
 
+async function autoLocate() {
+  locating.value = true
+  try {
+    const loc = await geo.locateUser()
+    form.neighborhood = loc.neighborhood
+    form.address = loc.address
+    form.latitude = loc.latitude
+    form.longitude = loc.longitude
+    if (loc.neighborhood && !neighborhoods.value.includes(loc.neighborhood)) {
+      neighborhoods.value.push(loc.neighborhood)
+    }
+    state.showToast(`Detected location: ${loc.neighborhood}`)
+  } catch (err) {
+    state.showToast(err.message || 'Could not detect location')
+  } finally {
+    locating.value = false
+  }
+}
+
 onMounted(() => {
   if (state.user && state.user.profile?.neighborhood) {
     form.neighborhood = state.user.profile.neighborhood
   }
+  api.getNeighborhoods().then(res => { if (res?.length) neighborhoods.value = res }).catch(() => {})
 })
 
 async function submitPost() {
@@ -125,6 +183,9 @@ async function submitPost() {
     // Reset form
     form.title = ''
     form.description = ''
+    form.address = ''
+    form.latitude = null
+    form.longitude = null
     // Switch to feed and view newly created post
     state.selectedPost = post
     state.currentTab = 'feed'
@@ -156,6 +217,10 @@ async function submitPost() {
 
 .type-option {
   flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   padding: 10px;
   border: 1px solid var(--border-color);
   background: #f8fafc;
@@ -168,9 +233,25 @@ async function submitPost() {
 }
 
 .type-option.active {
-  border-color: var(--primary);
-  background: #e0f2fe;
-  color: var(--primary);
+  border-width: 1.5px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.type-option.request-active {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.type-option.offer-active {
+  border-color: #10b981;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+/* flex `gap` already spaces these out; drop the inline-text margin */
+.type-option .inline-icon {
+  margin-right: 0;
 }
 
 .form-row {
@@ -193,8 +274,69 @@ async function submitPost() {
   padding: 40px 20px;
 }
 
-.empty-icon {
-  font-size: 2.5rem;
-  margin-bottom: 10px;
+.label-with-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.locate-badge-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--primary-light);
+  border: 1px solid rgba(13, 148, 136, 0.3);
+  color: var(--primary);
+  border-radius: 9999px;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.locate-badge-btn:hover:not(:disabled) {
+  background: #ccfbf1;
+  border-color: var(--primary);
+}
+
+.locate-badge-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.optional-label {
+  font-weight: 400;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.geo-safety-box {
+  margin-top: 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: #f0fdfa;
+  border: 1px solid rgba(13, 148, 136, 0.25);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.geo-safety-icon {
+  color: #0d9488;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.geo-safety-text {
+  font-size: 0.74rem;
+  color: #134e4a;
+  line-height: 1.4;
+}
+
+.geo-safety-text strong {
+  font-weight: 700;
+  color: #0f766e;
 }
 </style>

@@ -1,7 +1,9 @@
 import { reactive } from 'vue'
 
 const savedToken = localStorage.getItem('cw_token') || ''
-const savedUser = localStorage.getItem('cw_user') ? JSON.parse(localStorage.getItem('cw_user')) : null
+// Corrupt JSON here throws during module load and blanks the whole app
+let savedUser = null
+try { savedUser = JSON.parse(localStorage.getItem('cw_user')) } catch {}
 
 export const state = reactive({
   token: savedToken,
@@ -11,6 +13,9 @@ export const state = reactive({
   activeConversationId: null,
   showAuthModal: false,
   toast: null,
+  unreadMessagesCount: 0,
+  chatNotification: null,
+  chatNotificationTimer: null,
 
   setAuth(token, user) {
     this.token = token
@@ -29,6 +34,8 @@ export const state = reactive({
     this.currentTab = 'feed'
     this.selectedPost = null
     this.activeConversationId = null
+    this.unreadMessagesCount = 0
+    this.dismissChatNotification()
     this.showToast('Logged out')
   },
 
@@ -37,5 +44,22 @@ export const state = reactive({
     setTimeout(() => {
       if (this.toast === msg) this.toast = null
     }, 3000)
+  },
+
+  showChatNotification(notif) {
+    if (this.chatNotificationTimer) {
+      clearTimeout(this.chatNotificationTimer)
+    }
+    this.chatNotification = notif
+    this.chatNotificationTimer = setTimeout(() => {
+      this.chatNotification = null
+    }, 5500)
+  },
+
+  dismissChatNotification() {
+    if (this.chatNotificationTimer) {
+      clearTimeout(this.chatNotificationTimer)
+    }
+    this.chatNotification = null
   }
 })

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Community Weave</string>
+    <string name="title_activity_main">Community Weave</string>
+    <string name="package_name">com.communityweave.app</string>
+    <string name="custom_url_scheme">com.communityweave.app</string>
+</resources>

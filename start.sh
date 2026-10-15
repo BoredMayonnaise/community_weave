@@ -3,10 +3,10 @@ set -e
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
-echo "==> Starting Community Weave Backend on http://127.0.0.1:8000..."
+echo "==> Starting Community Weave Backend on http://127.0.0.1:${BACKEND_PORT:-8001}..."
 cd "$DIR/backend"
 ./venv/bin/python manage.py migrate --noinput
-./venv/bin/python manage.py runserver 0.0.0.0:8000 &
+./venv/bin/python manage.py runserver "0.0.0.0:${BACKEND_PORT:-8001}" &
 BACKEND_PID=$!
 
 echo "==> Starting Community Weave Frontend on http://localhost:5173..."
