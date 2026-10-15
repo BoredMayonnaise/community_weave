@@ -39,10 +39,10 @@
         </div>
       </div>
 
-      <!-- Quick Edit Neighborhood / Display Name -->
+      <!-- Quick Edit Neighborhood & Display Name -->
       <div class="card edit-card">
         <div class="edit-card-header">
-          <h4 style="font-size: 0.95rem">Update Barangay / Neighborhood</h4>
+          <h4 style="font-size: 0.95rem">Edit Profile & Neighborhood</h4>
           <button
             type="button"
             class="locate-badge-btn"
@@ -54,14 +54,25 @@
             <span>{{ locating ? 'Locating...' : 'Use My GPS' }}</span>
           </button>
         </div>
-        <div class="form-row">
-          <input
-            v-model="editNeighborhood"
-            class="form-input"
-            placeholder="e.g. Brgy. Zone 15, Cadiz or Downtown"
-          />
-          <button class="btn btn-secondary" :disabled="savingProfile" @click="saveProfile">
-            {{ savingProfile ? '...' : 'Save' }}
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
+          <div>
+            <label class="form-label" style="font-size: 0.76rem; margin-bottom: 4px; display: block; color: var(--text-muted);">Display Name</label>
+            <input
+              v-model="editDisplayName"
+              class="form-input"
+              placeholder="e.g. Maria Santos"
+            />
+          </div>
+          <div>
+            <label class="form-label" style="font-size: 0.76rem; margin-bottom: 4px; display: block; color: var(--text-muted);">Barangay / Neighborhood</label>
+            <input
+              v-model="editNeighborhood"
+              class="form-input"
+              placeholder="e.g. Brgy. Zone 15, Cadiz or Downtown"
+            />
+          </div>
+          <button class="btn btn-primary btn-block" style="margin-top: 2px;" :disabled="savingProfile" @click="saveProfile">
+            {{ savingProfile ? 'Saving...' : 'Save Profile (Using Token)' }}
           </button>
         </div>
       </div>
@@ -252,21 +263,155 @@
         </div>
       </div>
     </div>
+
+    <!-- App Version & Updates Card -->
+    <div class="card update-card" style="margin-top: 16px;">
+      <div class="update-card-header" style="display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <Smartphone class="inline-icon" :size="16" />
+          <span style="font-weight: 600; font-size: 0.92rem;">App Version & Updates</span>
+        </div>
+        <span class="badge" style="font-size: 0.72rem; background: rgba(13, 148, 136, 0.12); color: var(--primary); font-weight: 600;">
+          Installed: {{ APP_VERSION }}
+        </span>
+      </div>
+
+      <p style="margin-top: 10px; font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+        Community Weave native client with zero server RAM footprint.
+      </p>
+
+      <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center;">
+        <button class="btn btn-secondary" style="font-size: 0.8rem; flex: 1;" :disabled="checkingUpdate" @click="checkForAppUpdates">
+          <RefreshCw :size="13" :class="['inline-icon', { 'spin-icon': checkingUpdate }]" />
+          <span>{{ checkingUpdate ? 'Checking GitHub...' : 'Check for Updates' }}</span>
+        </button>
+        <a
+          v-if="latestRelease"
+          :href="latestApkUrl || latestRelease.html_url"
+          target="_blank"
+          class="btn btn-primary"
+          style="font-size: 0.8rem; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;"
+        >
+          <Download :size="13" />
+          <span>Download {{ latestRelease.tag_name }}</span>
+        </a>
+      </div>
+
+      <div v-if="updateStatusMsg" :class="['state-msg', updateAvailable ? 'text-success' : 'text-muted']" style="font-size: 0.78rem; margin-top: 8px; padding: 6px 10px; border-radius: 6px; background: rgba(0,0,0,0.03);">
+        {{ updateStatusMsg }}
+      </div>
+    </div>
+
+    <!-- Session Auth Token Card -->
+    <div v-if="state.token" class="card token-card" style="margin-top: 16px;">
+      <div class="token-card-header" @click="showTokenSection = !showTokenSection" style="cursor: pointer; display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <KeyRound class="inline-icon" :size="16" />
+          <span style="font-weight: 600; font-size: 0.92rem;">Session Auth Token</span>
+        </div>
+        <button type="button" class="btn-text" style="font-size: 0.78rem;">
+          {{ showTokenSection ? 'Hide' : 'Manage' }}
+        </button>
+      </div>
+
+      <div v-if="showTokenSection" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color, #e2e8f0);">
+        <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 8px;">
+          This DRF token authorizes all profile updates, posts, and direct messages:
+        </p>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input
+            :type="revealToken ? 'text' : 'password'"
+            :value="state.token"
+            readonly
+            class="form-input"
+            style="flex: 1; font-family: monospace; font-size: 0.76rem;"
+          />
+          <button class="btn btn-secondary" style="font-size: 0.78rem; padding: 0 10px;" @click="revealToken = !revealToken">
+            {{ revealToken ? 'Hide' : 'Reveal' }}
+          </button>
+          <button class="btn btn-secondary" style="font-size: 0.78rem; padding: 0 10px;" @click="copyToken">
+            <component :is="tokenCopied ? Check : Copy" :size="13" class="inline-icon" />
+            {{ tokenCopied ? 'Copied' : 'Copy' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { LockKeyhole, MapPin, ArrowRight, Gift, HandHelping, LocateFixed, ShieldCheck, Globe } from 'lucide-vue-next'
+import {
+  LockKeyhole, MapPin, ArrowRight, Gift, HandHelping, LocateFixed, ShieldCheck,
+  Globe, Smartphone, RefreshCw, Download, KeyRound, Copy, Check
+} from 'lucide-vue-next'
 import { state } from '../state.js'
 import { api, getApiBaseUrl, setApiBaseUrl, DEFAULT_LIVE_API_URL } from '../api.js'
 import { geo } from '../geo.js'
 
+const editDisplayName = ref('')
 const editNeighborhood = ref('')
 const savingProfile = ref(false)
 const locating = ref(false)
 const myPosts = ref([])
 const loadingPosts = ref(false)
+
+const APP_VERSION = 'v1.0.0'
+const checkingUpdate = ref(false)
+const updateStatusMsg = ref('')
+const updateAvailable = ref(false)
+const latestRelease = ref(null)
+const latestApkUrl = ref('')
+
+const showTokenSection = ref(false)
+const revealToken = ref(false)
+const tokenCopied = ref(false)
+
+async function checkForAppUpdates() {
+  checkingUpdate.value = true
+  updateStatusMsg.value = ''
+  updateAvailable.value = false
+  latestRelease.value = null
+  latestApkUrl.value = ''
+  try {
+    const res = await fetch('https://api.github.com/repos/BoredMayonnaise/community_weave/releases/latest', {
+      headers: { 'Accept': 'application/vnd.github.v3+json' },
+      signal: AbortSignal.timeout(8000)
+    })
+    if (!res.ok) {
+      throw new Error(`GitHub API returned status ${res.status}`)
+    }
+    const data = await res.json()
+    latestRelease.value = data
+    const apkAsset = data.assets?.find(a => a.name.endsWith('.apk'))
+    if (apkAsset) {
+      latestApkUrl.value = apkAsset.browser_download_url
+    }
+    if (data.tag_name && data.tag_name !== APP_VERSION) {
+      updateAvailable.value = true
+      updateStatusMsg.value = `New release ${data.tag_name} is available!`
+    } else {
+      updateAvailable.value = false
+      updateStatusMsg.value = `You are on the latest version (${APP_VERSION}).`
+    }
+  } catch (err) {
+    updateStatusMsg.value = `Could not check updates: ${err.message}`
+  } finally {
+    checkingUpdate.value = false
+  }
+}
+
+async function copyToken() {
+  if (!state.token) return
+  try {
+    await navigator.clipboard.writeText(state.token)
+    tokenCopied.value = true
+    state.showToast('Token copied to clipboard!')
+    setTimeout(() => { tokenCopied.value = false }, 2500)
+  } catch {
+    state.showToast('Please copy token manually.')
+  }
+}
 
 const showSecuritySection = ref(false)
 const oldPassword = ref('')
@@ -413,13 +558,15 @@ async function handleDeleteAccount() {
 }
 
 async function saveProfile() {
-  if (!editNeighborhood.value.trim()) return
   savingProfile.value = true
   try {
-    const updated = await api.updateProfile({ neighborhood: editNeighborhood.value.trim() })
+    const payload = {}
+    if (editNeighborhood.value.trim()) payload.neighborhood = editNeighborhood.value.trim()
+    if (editDisplayName.value.trim()) payload.display_name = editDisplayName.value.trim()
+    const updated = await api.updateProfile(payload)
     state.user = updated
     localStorage.setItem('cw_user', JSON.stringify(updated))
-    state.showToast('Neighborhood updated!')
+    state.showToast('Profile updated using token!')
   } catch (err) {
     state.showToast(err.message || 'Failed to update')
   } finally {
@@ -462,6 +609,7 @@ async function deletePost(post) {
 
 onMounted(() => {
   if (state.user) {
+    editDisplayName.value = state.user.profile?.display_name || state.user.username || ''
     editNeighborhood.value = state.user.profile?.neighborhood || ''
     fetchMyPosts()
   }
@@ -469,6 +617,7 @@ onMounted(() => {
 
 watch(() => state.user, (u) => {
   if (u) {
+    editDisplayName.value = u.profile?.display_name || u.username || ''
     editNeighborhood.value = u.profile?.neighborhood || ''
     fetchMyPosts()
   }

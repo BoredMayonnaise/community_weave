@@ -60,16 +60,29 @@
           </button>
         </div>
 
-        <!-- Map Shortcut Button -->
-        <button
-          type="button"
-          class="map-shortcut-btn"
-          @click="state.currentTab = 'map'"
-          title="Explore neighborhood on map"
-        >
-          <Map :size="14" />
-          <span>Map</span>
-        </button>
+        <!-- Action Buttons -->
+        <div style="display: flex; gap: 6px; margin-left: auto;">
+          <button
+            type="button"
+            class="map-shortcut-btn"
+            @click="fetchPosts"
+            :disabled="loading"
+            title="Refresh latest posts"
+          >
+            <RotateCw :size="13" :class="{ 'spin-icon': loading }" />
+            <span>{{ loading ? '...' : 'Refresh' }}</span>
+          </button>
+
+          <button
+            type="button"
+            class="map-shortcut-btn"
+            @click="state.currentTab = 'map'"
+            title="Explore neighborhood on map"
+          >
+            <Map :size="13" />
+            <span>Map</span>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -134,7 +147,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { Sprout, Search, X, Plus, Gift, HandHelping, MapPin, Map } from 'lucide-vue-next'
+import { Sprout, Search, X, Plus, Gift, HandHelping, MapPin, Map, RotateCw } from 'lucide-vue-next'
 import { state } from '../state.js'
 import { api } from '../api.js'
 

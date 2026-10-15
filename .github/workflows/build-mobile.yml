@@ -91,21 +91,35 @@ jobs:
             CODE_SIGNING_IDENTITY="" \
             clean build
 
-      - name: Archive iOS App
+      - name: Archive iOS App (Zip & IPA)
         working-directory: frontend/ios/App
         run: |
           mkdir -p build-output
+          APP_PATH=""
           if [ -d "build/Build/Products/Debug-iphoneos/App.app" ]; then
-            cd build/Build/Products/Debug-iphoneos && zip -r ../../../../build-output/CommunityWeave-iOS-Debug.zip App.app
+            APP_PATH="build/Build/Products/Debug-iphoneos/App.app"
           elif [ -d "build/Debug-iphoneos/App.app" ]; then
-            cd build/Debug-iphoneos && zip -r ../../../build-output/CommunityWeave-iOS-Debug.zip App.app
+            APP_PATH="build/Debug-iphoneos/App.app"
+          fi
+
+          if [ -n "$APP_PATH" ]; then
+            # 1. Zip archive for development / simulator
+            APP_DIR=$(dirname "$APP_PATH")
+            (cd "$APP_DIR" && zip -r ../../../../build-output/CommunityWeave-iOS-Debug.zip App.app)
+
+            # 2. Native IPA package (Payload folder structure) for direct sideloading (AltStore / TrollStore / Sideloadly)
+            rm -rf /tmp/payload-wrap && mkdir -p /tmp/payload-wrap/Payload
+            cp -R "$APP_PATH" /tmp/payload-wrap/Payload/
+            (cd /tmp/payload-wrap && zip -r "$GITHUB_WORKSPACE/frontend/ios/App/build-output/CommunityWeave-iOS-Debug.ipa" Payload)
           fi
 
       - name: Upload iOS App Artifact
         uses: actions/upload-artifact@v4
         with:
           name: community-weave-ios-app
-          path: frontend/ios/App/build-output/*.zip
+          path: |
+            frontend/ios/App/build-output/*.zip
+            frontend/ios/App/build-output/*.ipa
           retention-days: 14
 
   publish-release:
@@ -135,7 +149,12 @@ jobs:
         run: |
           mkdir -p release-binaries
           cp release-downloads/android/app-debug.apk release-binaries/CommunityWeave-Android-${{ github.ref_name }}.apk
-          cp release-downloads/ios/CommunityWeave-iOS-Debug.zip release-binaries/CommunityWeave-iOS-${{ github.ref_name }}.zip
+          if [ -f "release-downloads/ios/CommunityWeave-iOS-Debug.ipa" ]; then
+            cp release-downloads/ios/CommunityWeave-iOS-Debug.ipa release-binaries/CommunityWeave-iOS-${{ github.ref_name }}.ipa
+          fi
+          if [ -f "release-downloads/ios/CommunityWeave-iOS-Debug.zip" ]; then
+            cp release-downloads/ios/CommunityWeave-iOS-Debug.zip release-binaries/CommunityWeave-iOS-${{ github.ref_name }}.zip
+          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

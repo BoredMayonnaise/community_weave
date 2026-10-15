@@ -335,6 +335,10 @@ body {
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.nav-item:active {
+  transform: scale(0.92);
+}
+
 .nav-item.active {
   color: var(--primary);
   font-weight: 700;
@@ -492,6 +496,24 @@ body {
   margin-bottom: 12px;
   box-shadow: var(--shadow-sm);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: rgba(13, 148, 136, 0.25);
+}
+
+.card:active {
+  transform: scale(0.99);
+}
+
+.spin-icon {
+  animation: spin-rotate 0.8s linear infinite;
+}
+
+@keyframes spin-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* Badges */
