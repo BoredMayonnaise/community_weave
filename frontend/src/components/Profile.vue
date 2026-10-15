@@ -218,52 +218,6 @@
       </button>
     </div>
 
-    <!-- Server Connection Card -->
-    <div class="card server-card" style="margin-top: 16px;">
-      <div class="server-card-header" @click="showServerSection = !showServerSection" style="cursor: pointer; display: flex; align-items: center; justify-content: space-between;">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <Globe class="inline-icon" :size="16" />
-          <span style="font-weight: 600; font-size: 0.92rem;">API Server</span>
-        </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span class="badge badge-offer" style="font-size: 0.72rem; text-transform: none; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-            {{ currentServerHost }}
-          </span>
-          <button type="button" class="btn-text" style="font-size: 0.78rem;">
-            {{ showServerSection ? 'Hide' : 'Configure' }}
-          </button>
-        </div>
-      </div>
-
-      <div v-if="showServerSection" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color, #e2e8f0);">
-        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">
-          Active API: <strong style="color: var(--text-color, #0f172a); font-family: monospace; font-size: 0.76rem;">{{ activeServerUrl }}</strong>
-        </p>
-        <div class="form-row" style="display: flex; gap: 8px;">
-          <input
-            v-model="customServerUrl"
-            class="form-input"
-            style="flex: 1; font-size: 0.82rem;"
-            :placeholder="DEFAULT_LIVE_API_URL"
-          />
-          <button class="btn btn-secondary" style="white-space: nowrap; font-size: 0.82rem;" @click="saveServerUrl">
-            Save
-          </button>
-        </div>
-        <div style="display: flex; gap: 8px; margin-top: 8px; align-items: center;">
-          <button class="btn-text" style="font-size: 0.78rem;" @click="resetServerUrl">
-            Reset to DuckDNS
-          </button>
-          <button class="btn-text text-primary" style="font-size: 0.78rem; margin-left: auto;" :disabled="testingConnection" @click="testServerConnection">
-            {{ testingConnection ? 'Pinging...' : 'Test Ping' }}
-          </button>
-        </div>
-        <div v-if="serverPingResult" :class="['state-msg', serverPingSuccess ? 'text-success' : 'text-danger']" style="font-size: 0.78rem; margin-top: 8px; padding: 6px 10px; border-radius: 6px; background: rgba(0,0,0,0.03);">
-          {{ serverPingResult }}
-        </div>
-      </div>
-    </div>
-
     <!-- App Version & Updates Card -->
     <div class="card update-card" style="margin-top: 16px;">
       <div class="update-card-header" style="display: flex; align-items: center; justify-content: space-between;">
@@ -343,10 +297,10 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import {
   LockKeyhole, MapPin, ArrowRight, Gift, HandHelping, LocateFixed, ShieldCheck,
-  Globe, Smartphone, RefreshCw, Download, KeyRound, Copy, Check
+  Smartphone, RefreshCw, Download, KeyRound, Copy, Check
 } from 'lucide-vue-next'
 import { state } from '../state.js'
-import { api, getApiBaseUrl, setApiBaseUrl, DEFAULT_LIVE_API_URL } from '../api.js'
+import { api } from '../api.js'
 import { geo } from '../geo.js'
 
 const editDisplayName = ref('')
@@ -423,58 +377,6 @@ const passwordError = ref('')
 const showDeleteConfirm = ref(false)
 const deleteConfirmPassword = ref('')
 const deletingAccount = ref(false)
-
-const showServerSection = ref(false)
-const customServerUrl = ref(localStorage.getItem('cw_server_url') || '')
-const activeServerUrl = ref(getApiBaseUrl())
-const testingConnection = ref(false)
-const serverPingResult = ref('')
-const serverPingSuccess = ref(false)
-
-const currentServerHost = computed(() => {
-  try {
-    const url = new URL(activeServerUrl.value.startsWith('http') ? activeServerUrl.value : window.location.origin + activeServerUrl.value)
-    return url.hostname
-  } catch {
-    return 'duckdns.org'
-  }
-})
-
-function saveServerUrl() {
-  setApiBaseUrl(customServerUrl.value)
-  activeServerUrl.value = getApiBaseUrl()
-  state.showToast(`Server endpoint updated: ${activeServerUrl.value}`)
-  serverPingResult.value = ''
-}
-
-function resetServerUrl() {
-  setApiBaseUrl('')
-  customServerUrl.value = ''
-  activeServerUrl.value = getApiBaseUrl()
-  state.showToast('Reset to default DuckDNS endpoint')
-  serverPingResult.value = ''
-}
-
-async function testServerConnection() {
-  testingConnection.value = true
-  serverPingResult.value = ''
-  try {
-    const base = activeServerUrl.value
-    const res = await fetch(`${base}/posts/`, { signal: AbortSignal.timeout(6000) })
-    if (res.ok) {
-      serverPingSuccess.value = true
-      serverPingResult.value = `Connected successfully! (HTTP ${res.status})`
-    } else {
-      serverPingSuccess.value = false
-      serverPingResult.value = `Server responded with HTTP ${res.status}`
-    }
-  } catch (err) {
-    serverPingSuccess.value = false
-    serverPingResult.value = `Could not reach server: ${err.message}`
-  } finally {
-    testingConnection.value = false
-  }
-}
 
 const activeCount = computed(() => myPosts.value.filter(p => p.status === 'open').length)
 const closedCount = computed(() => myPosts.value.filter(p => p.status === 'closed').length)
