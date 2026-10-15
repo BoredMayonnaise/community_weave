@@ -46,17 +46,6 @@
       </div>
 
       <div class="header-actions">
-        <a
-          href="/install.html"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="header-install-link"
-          title="Install Native App (APK, iOS, PWA)"
-        >
-          <Download :size="13" />
-          <span>Get App</span>
-        </a>
-
         <button
           v-if="!state.user"
           :class="['header-user-btn', 'header-guest-btn', { active: state.currentTab === 'profile' }]"
@@ -149,7 +138,7 @@
 
 <script setup>
 import { onMounted, onUnmounted, watch } from 'vue'
-import { House, Map, SquarePen, MessagesSquare, User, LogIn, X, Download } from 'lucide-vue-next'
+import { House, Map, SquarePen, MessagesSquare, User, LogIn, X } from 'lucide-vue-next'
 import { state } from './state.js'
 import { api } from './api.js'
 import Feed from './components/Feed.vue'
